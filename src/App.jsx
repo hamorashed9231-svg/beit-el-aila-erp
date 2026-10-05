@@ -64,11 +64,22 @@ export default function App() {
         }
       }
     };
+    const handleOnline = () => {
+      fetchLatestState();
+    };
+    const handleOffline = () => {
+      setIsServerConnected(false);
+    };
+
     window.addEventListener('storage', handleStorageChange);
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
 
     return () => {
       clearInterval(interval);
       window.removeEventListener('storage', handleStorageChange);
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
     };
   }, []);
 

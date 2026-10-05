@@ -120,16 +120,32 @@ export function saveLocalCache(state) {
   }
 }
 
+export const DIRTY_OFFLINE_KEY = 'beit_el_aila_dirty_offline_v5';
+
 export async function pushStateToFirebase(state) {
   try {
     const normalized = normalizeState(state);
+    normalized._updatedAt = Date.now();
     const res = await fetch(FIREBASE_DB_URL, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(normalized)
     });
-    return res.ok;
+    if (res.ok) {
+      try {
+        localStorage.removeItem(DIRTY_OFFLINE_KEY);
+      } catch (e) {
+        // ignore
+      }
+      return true;
+    }
+    throw new Error(`Firebase PUT ${res.status}`);
   } catch (e) {
+    try {
+      localStorage.setItem(DIRTY_OFFLINE_KEY, '1');
+    } catch (err) {
+      // ignore
+    }
     console.warn('Firebase Cloud Sync deferred (Offline mode):', e.message);
     return false;
   }
@@ -137,6 +153,15 @@ export async function pushStateToFirebase(state) {
 
 export async function fetchStateFromFirebase() {
   try {
+    // If the user worked offline and has unsynced local changes, push them to Firebase first!
+    if (typeof window !== 'undefined' && localStorage.getItem(DIRTY_OFFLINE_KEY) === '1') {
+      const localPending = getLocalCache();
+      const pushed = await pushStateToFirebase(localPending);
+      if (pushed) {
+        return { state: localPending, cloudConnected: true };
+      }
+    }
+
     const res = await fetch(FIREBASE_DB_URL);
     if (!res.ok) throw new Error(`Firebase HTTP ${res.status}`);
     const data = await res.json();
