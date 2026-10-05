@@ -3,7 +3,7 @@ import {
   ShoppingCart, Package, Printer, Users, Globe, BarChart3,
   Cloud, Wifi, WifiOff, RefreshCw, BookOpen, Bell, ShieldCheck, AlertTriangle, ExternalLink
 } from 'lucide-react';
-import { getLocalCache, saveLocalCache, apiRequest, STORAGE_KEY } from './api.js';
+import { getLocalCache, saveLocalCache, apiRequest, pushStateToFirebase, STORAGE_KEY } from './api.js';
 import POSView from './components/POSView.jsx';
 import InventoryView from './components/InventoryView.jsx';
 import PrintCenterView from './components/PrintCenterView.jsx';
@@ -67,7 +67,7 @@ export default function App() {
     };
   }, []);
 
-  // Helper to apply state update both via API and local cache
+  // Helper to apply state update via Local Server, Firebase Cloud, and Offline Cache
   const mutateState = async (endpoint, method, body, optimisticUpdater) => {
     const res = await apiRequest(endpoint, {
       method,
@@ -78,21 +78,27 @@ export default function App() {
       setIsServerConnected(true);
       return res;
     } else {
-      // Offline fallback mutation in browser
-      setIsServerConnected(false);
+      // Apply mutation locally and push immediately to Firebase Realtime Database
+      let updatedState = null;
       setState(prev => {
         const next = optimisticUpdater ? optimisticUpdater(structuredClone(prev)) : prev;
         if (!next.syncQueue) next.syncQueue = [];
         next.syncQueue.unshift({
-          id: `OFFLINE-${Date.now()}`,
+          id: `SYNC-${Date.now()}`,
           action: `${method} ${endpoint}`,
-          entity: 'offline_engine',
+          entity: 'cloud_sync',
           timestamp: new Date().toISOString(),
-          status: 'pending'
+          status: 'synced'
         });
+        if (next.syncQueue.length > 150) next.syncQueue = next.syncQueue.slice(0, 150);
         saveLocalCache(next);
+        updatedState = next;
         return next;
       });
+      if (updatedState) {
+        const synced = await pushStateToFirebase(updatedState);
+        setIsServerConnected(synced);
+      }
       return res;
     }
   };
