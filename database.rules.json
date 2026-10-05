@@ -3,6 +3,9 @@
     ".read": true,
     ".write": true,
     "state": {
+      ".validate": "newData.hasChildren(['settings'])"
+    },
+    "state_v2": {
       ".validate": "newData.hasChildren(['settings'])",
       "settings": {
         ".validate": "newData.hasChild('storeName')"

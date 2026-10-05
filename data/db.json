@@ -13,7 +13,7 @@
     "freeDeliveryThreshold": 500,
     "cloudSyncEnabled": true,
     "cloudEndpoint": "https://beit-el-aila-erp-default-rtdb.firebaseio.com/state.json",
-    "lastSyncTime": "2026-10-05T06:21:29.665Z",
+    "lastSyncTime": "2026-10-05T06:59:38.236Z",
     "branchId": "MAIN-POS-01",
     "printPrices": {
       "bwSingleA4": 1,

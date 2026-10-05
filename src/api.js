@@ -1,14 +1,27 @@
 import { initialDatabase } from '../server/seedData.js';
 
-export const STORAGE_KEY = 'beit_el_aila_clean_db_v4';
+export const STORAGE_KEY = 'beit_el_aila_clean_db_v5';
 const LEGACY_KEYS = [
+  'beit_el_aila_clean_db_v4',
   'beit_el_aila_offline_db_v3',
   'beit_el_aila_erp_cache_v2',
   'beit_el_aila_erp_cache_v1',
   'maktabet_el_aila_erp_cache_v1'
 ];
 
-export const FIREBASE_DB_URL = 'https://beit-el-aila-erp-default-rtdb.firebaseio.com/state.json';
+export const FIREBASE_DB_URL = 'https://beit-el-aila-erp-default-rtdb.firebaseio.com/state_v2.json';
+
+const DUMMY_BARCODES = new Set([
+  '622100100101', '622100100201', '622100100301', '622100200101',
+  '622100200201', '622100300101', '622100300201', '622100300301',
+  '622100400101', '622100400201', '622100500101', '622100500201',
+  '622100600101', '622100700101', '622100700201', '622100600201',
+  '622100800101'
+]);
+
+const DUMMY_NOTE_CODES = new Set([
+  'M-3SEC-PHY-01', 'M-3PREP-EN-01', 'M-1SEC-CHEM-01', 'M-6PRIM-AR-01'
+]);
 
 function cleanLegacyCache() {
   if (typeof window === 'undefined' || !window.localStorage) return;
@@ -25,6 +38,7 @@ export function normalizeState(parsed) {
   if (!parsed || typeof parsed !== 'object') return structuredClone(initialDatabase);
 
   parsed._initialized = true;
+  parsed._cleanV5 = true;
 
   // Firebase RTDB drops empty arrays; ensure all collections exist as arrays (defaulting to empty [])
   const emptyableCollections = [
@@ -38,12 +52,23 @@ export function normalizeState(parsed) {
     }
   });
 
+  // Strip out any legacy dummy items if they ever appear
+  parsed.products = parsed.products.filter(p => !DUMMY_BARCODES.has(p.barcode));
+  parsed.studyNotes = parsed.studyNotes.filter(n => !DUMMY_NOTE_CODES.has(n.code));
+
   if (!Array.isArray(parsed.users) || parsed.users.length === 0) {
     parsed.users = structuredClone(initialDatabase.users);
   }
 
   if (!Array.isArray(parsed.customers) || parsed.customers.length === 0) {
     parsed.customers = structuredClone(initialDatabase.customers);
+  } else {
+    parsed.customers = parsed.customers.filter(
+      c => !['01066778899', '01099887766', '01122334488'].includes(c.phone)
+    );
+    if (parsed.customers[0]?.id === 'CUS-1' && parsed.sales.length === 0) {
+      parsed.customers[0].totalPurchases = 0;
+    }
   }
 
   if (!parsed.settings) {
