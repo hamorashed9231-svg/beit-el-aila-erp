@@ -70,7 +70,7 @@ export default function InventoryView({
       name: '',
       barcode: generatedBarcode,
       sku: `SKU-${Math.floor(100 + Math.random() * 900)}`,
-      category: isSnackOrCarton ? 'CAT-7' : 'CAT-1',
+      category: state.categories[0]?.id || 'GENERAL',
       costPrice: defPieceCost,
       sellPrice: defPieceSell,
       wholesalePrice: defPieceSell - 1,
@@ -367,6 +367,23 @@ export default function InventoryView({
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
+              {filteredProducts.length === 0 && (
+                <tr>
+                  <td colSpan="8" className="py-12 text-center text-slate-500">
+                    <Box className="w-10 h-10 text-slate-300 mx-auto mb-2 stroke-1" />
+                    <div className="font-black text-sm text-slate-800">المخزن فارغ حالياً — لا توجد أصناف مسجلة</div>
+                    <p className="text-xs text-slate-400 mt-1 mb-3">ابدأ بإضافة أصنافك الجديدة بالكرتونة أو بالقطعة وسيتم حساب الرصيد والتكلفة تلقائياً</p>
+                    <button
+                      type="button"
+                      onClick={() => openAddModal('carton')}
+                      className="bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs px-5 py-2.5 rounded-xl inline-flex items-center gap-1.5 shadow"
+                    >
+                      <Plus className="w-4 h-4" />
+                      + إضافة منتج جديد الآن
+                    </button>
+                  </td>
+                </tr>
+              )}
               {filteredProducts.map(prod => {
                 const catName = state.categories.find(c => c.id === prod.category)?.name || 'عام';
                 const isLow = prod.stock <= prod.minStock;
@@ -546,6 +563,9 @@ export default function InventoryView({
                     onChange={e => setEditingProduct({ ...editingProduct, category: e.target.value })}
                     className="w-full rounded-xl border border-slate-300 px-3 py-2 font-bold bg-white"
                   >
+                    {state.categories.length === 0 && (
+                      <option value="GENERAL">عام (اضغط + قسم جديد سريع لإضافة قسم)</option>
+                    )}
                     {state.categories.map(c => (
                       <option key={c.id} value={c.id}>{c.name}</option>
                     ))}

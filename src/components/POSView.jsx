@@ -665,6 +665,33 @@ export default function POSView({
 
         {/* TAB 1: PRODUCTS GRID */}
         {activeCatalogTab === 'products' && (
+          filteredProducts.length === 0 ? (
+            <div className="bg-white rounded-2xl border-2 border-dashed border-slate-300 p-10 text-center space-y-3 shadow-sm">
+              <Barcode className="w-12 h-12 text-emerald-600 mx-auto stroke-1" />
+              <h4 className="font-black text-base text-slate-900">لا توجد أصناف مسجلة حالياً</h4>
+              <p className="text-xs text-slate-500 max-w-md mx-auto">
+                يمكنك مسح أي باركود بجهاز الليزر مباشرة لتعريف الصنف فوراً، أو الضغط على الزر بالأسفل لإضافة أول منتج (سواء بالكرتونة أو بالقطعة).
+              </p>
+              <div className="flex flex-wrap items-center justify-center gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => openQuickAddProduct('')}
+                  className="bg-blue-600 hover:bg-blue-700 text-white font-black text-xs px-5 py-3 rounded-xl flex items-center gap-2 shadow"
+                >
+                  <Plus className="w-4 h-4" />
+                  + تعريف صنف جديد (بالكرتونة أو بالقطعة)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setQuickCatOpen(true)}
+                  className="bg-purple-50 hover:bg-purple-100 text-purple-800 border border-purple-200 font-black text-xs px-4 py-3 rounded-xl flex items-center gap-1.5"
+                >
+                  <Plus className="w-4 h-4" />
+                  + إضافة قسم جديد
+                </button>
+              </div>
+            </div>
+          ) : (
           <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 max-h-[630px] overflow-y-auto pr-1">
             {filteredProducts.map(prod => {
               const isLowStock = prod.stock <= prod.minStock;
@@ -721,6 +748,7 @@ export default function POSView({
               );
             })}
           </div>
+          )
         )}
 
         {/* TAB 2: STUDY NOTES GRID */}
@@ -1180,6 +1208,9 @@ export default function POSView({
                   onChange={e => setQaCategory(e.target.value)}
                   className="w-full rounded-xl border border-slate-300 px-3 py-2 font-bold bg-white"
                 >
+                  {state.categories.length === 0 && (
+                    <option value="GENERAL">عام (يمكنك إضافة أقسام من زر + قسم جديد)</option>
+                  )}
                   {state.categories.map(c => (
                     <option key={c.id} value={c.id}>{c.name}</option>
                   ))}

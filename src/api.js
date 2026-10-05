@@ -1,34 +1,51 @@
 import { initialDatabase } from '../server/seedData.js';
 
-export const STORAGE_KEY = 'beit_el_aila_offline_db_v3';
+export const STORAGE_KEY = 'beit_el_aila_clean_db_v4';
+const LEGACY_KEYS = [
+  'beit_el_aila_offline_db_v3',
+  'beit_el_aila_erp_cache_v2',
+  'beit_el_aila_erp_cache_v1',
+  'maktabet_el_aila_erp_cache_v1'
+];
+
 export const FIREBASE_DB_URL = 'https://beit-el-aila-erp-default-rtdb.firebaseio.com/state.json';
 
-function normalizeState(parsed) {
+function cleanLegacyCache() {
+  if (typeof window === 'undefined' || !window.localStorage) return;
+  LEGACY_KEYS.forEach(k => {
+    try {
+      window.localStorage.removeItem(k);
+    } catch (e) {
+      // ignore
+    }
+  });
+}
+
+export function normalizeState(parsed) {
   if (!parsed || typeof parsed !== 'object') return structuredClone(initialDatabase);
-  // Firebase RTDB drops empty arrays; ensure all collections exist as arrays
-  const collections = [
-    'users', 'categories', 'products', 'studyNotes', 'noteReservations',
-    'printJobs', 'customers', 'suppliers', 'sales', 'onlineOrders',
+
+  parsed._initialized = true;
+
+  // Firebase RTDB drops empty arrays; ensure all collections exist as arrays (defaulting to empty [])
+  const emptyableCollections = [
+    'categories', 'products', 'studyNotes', 'noteReservations',
+    'printJobs', 'suppliers', 'sales', 'onlineOrders',
     'expenses', 'shifts', 'syncQueue'
   ];
-  collections.forEach(key => {
+  emptyableCollections.forEach(key => {
     if (!Array.isArray(parsed[key])) {
-      parsed[key] = initialDatabase[key] ? structuredClone(initialDatabase[key]) : [];
+      parsed[key] = [];
     }
   });
-  // Ensure new categories (e.g. شيبسي وسناكس, ألعاب وإكسسوارات) exist even on older cached states
-  initialDatabase.categories.forEach(seedCat => {
-    if (!parsed.categories.some(c => c.id === seedCat.id)) {
-      parsed.categories.push(structuredClone(seedCat));
-    }
-  });
-  // Ensure new sample snacks/gifts products exist if missing
-  ['PRD-1014', 'PRD-1015', 'PRD-1016', 'PRD-1017'].forEach(pid => {
-    if (!parsed.products.some(p => p.id === pid)) {
-      const found = initialDatabase.products.find(p => p.id === pid);
-      if (found) parsed.products.push(structuredClone(found));
-    }
-  });
+
+  if (!Array.isArray(parsed.users) || parsed.users.length === 0) {
+    parsed.users = structuredClone(initialDatabase.users);
+  }
+
+  if (!Array.isArray(parsed.customers) || parsed.customers.length === 0) {
+    parsed.customers = structuredClone(initialDatabase.customers);
+  }
+
   if (!parsed.settings) {
     parsed.settings = structuredClone(initialDatabase.settings);
   } else {
@@ -43,6 +60,7 @@ function normalizeState(parsed) {
 }
 
 export function getLocalCache() {
+  cleanLegacyCache();
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (raw) {
@@ -52,13 +70,17 @@ export function getLocalCache() {
     console.warn('Failed to read local cache', e);
   }
   const initial = structuredClone(initialDatabase);
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(initial));
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(initial));
+  } catch (e) {
+    // ignore
+  }
   return initial;
 }
 
 export function saveLocalCache(state) {
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(normalizeState(state)));
   } catch (e) {
     console.warn('Failed to save local cache', e);
   }
@@ -66,10 +88,11 @@ export function saveLocalCache(state) {
 
 export async function pushStateToFirebase(state) {
   try {
+    const normalized = normalizeState(state);
     const res = await fetch(FIREBASE_DB_URL, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(state)
+      body: JSON.stringify(normalized)
     });
     return res.ok;
   } catch (e) {
@@ -83,7 +106,7 @@ export async function fetchStateFromFirebase() {
     const res = await fetch(FIREBASE_DB_URL);
     if (!res.ok) throw new Error(`Firebase HTTP ${res.status}`);
     const data = await res.json();
-    if (data && data.products) {
+    if (data && (data.settings || data.users || data._initialized)) {
       const normalized = normalizeState(data);
       saveLocalCache(normalized);
       return { state: normalized, cloudConnected: true };
@@ -112,7 +135,7 @@ export async function apiRequest(endpoint, options = {}) {
       });
       if (res.ok) {
         const data = await res.json();
-        const nextState = data?.state || (endpoint === '/api/state' && data?.products ? data : null);
+        const nextState = data?.state || (endpoint === '/api/state' && (data?.settings || data?.products) ? data : null);
         if (nextState) {
           const normalized = normalizeState(nextState);
           saveLocalCache(normalized);

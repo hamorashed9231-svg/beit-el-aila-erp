@@ -20,12 +20,17 @@ export default function App() {
   const [isServerConnected, setIsServerConnected] = useState(true);
   const [isSyncing, setIsSyncing] = useState(false);
 
-  // Detect if opened in Standalone Customer Store mode (/store or ?mode=store or #store)
+  // Detect if opened in Standalone Customer Store mode (/store, ?mode=store, #store, OR any Mobile/Tablet device)
   const [isStandaloneStore] = useState(() => {
     const path = window.location.pathname;
     const params = new URLSearchParams(window.location.search);
     const hash = window.location.hash;
-    return path.startsWith('/store') || params.get('mode') === 'store' || hash === '#store';
+    if (params.get('erp') === '1' || params.get('admin') === '1') return false;
+    if (path.startsWith('/store') || params.get('mode') === 'store' || hash === '#store') return true;
+    const ua = navigator.userAgent || '';
+    const isMobileOrTabletUA = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini|Mobile|Tablet/i.test(ua);
+    const isTouchTabletOrPhone = (navigator.maxTouchPoints > 1 && window.innerWidth < 1024) || window.innerWidth < 768;
+    return isMobileOrTabletUA || isTouchTabletOrPhone;
   });
 
   // Modals
@@ -36,7 +41,7 @@ export default function App() {
   useEffect(() => {
     async function fetchLatestState() {
       const res = await apiRequest('/api/state');
-      if (!res.offlineFallback && res.products) {
+      if (!res.offlineFallback && (res.settings || res.products)) {
         setState(res);
         setIsServerConnected(true);
       } else if (res.state) {
@@ -428,18 +433,19 @@ export default function App() {
               };
             } else {
               const prod = draft.products.find(p => p.id === item.id);
-              const cPrice = prod ? prod.costPrice : item.price * 0.75;
-              if (prod) prod.stock = Math.max(0, prod.stock - qty);
+              const factor = Number(item.factor) || 1;
+              const cPrice = prod ? prod.costPrice * factor : item.price * 0.75;
+              if (prod) prod.stock = Math.max(0, prod.stock - qty * factor);
               totalCost += cPrice * qty;
               return {
                 productId: item.id,
                 itemType: 'product',
                 name: item.name,
                 unitName: item.unitName || 'قطعة',
-                factor: 1,
+                factor,
                 quantity: qty,
                 unitPrice: item.price,
-                costPrice: cPrice,
+                costPrice: prod ? prod.costPrice : item.price * 0.75,
                 total: item.total
               };
             }
@@ -496,6 +502,38 @@ export default function App() {
     await mutateState('/api/restore', 'POST', backupData, () => backupData);
   };
 
+  const handleResetAllData = async () => {
+    await mutateState('/api/reset', 'POST', {}, (draft) => ({
+      ...draft,
+      _initialized: true,
+      categories: [],
+      products: [],
+      studyNotes: [],
+      noteReservations: [],
+      printJobs: [],
+      customers: [
+        {
+          id: 'CUS-1',
+          name: 'عميل نقدي (كاشير)',
+          phone: '-',
+          type: 'walkin',
+          balance: 0,
+          creditLimit: 0,
+          loyaltyPoints: 0,
+          totalPurchases: 0,
+          notes: 'الحساب الافتراضي للمبيعات النقدية السريعة',
+          transactions: []
+        }
+      ],
+      suppliers: [],
+      sales: [],
+      onlineOrders: [],
+      expenses: [],
+      shifts: [],
+      syncQueue: []
+    }));
+  };
+
   const handleSaveSettings = async (settingsPatch) => {
     await mutateState('/api/settings', 'PUT', settingsPatch, (draft) => {
       draft.settings = { ...draft.settings, ...settingsPatch };
@@ -506,11 +544,11 @@ export default function App() {
   const storeName = state.settings?.storeName || 'بيت العيلة';
   const logoUrl = state.settings?.logoUrl || '/logo.jpg';
 
-  // If opened on /store (or ?mode=store), render ONLY the Standalone Online Storefront for customers
+  // If opened on /store (or on any Mobile/Tablet device), render ONLY the Standalone Online Storefront for customers
   if (isStandaloneStore) {
     return (
-      <div className="min-h-screen flex flex-col bg-slate-50 text-slate-900">
-        <main className="flex-1 max-w-[1440px] w-full mx-auto px-4 pb-10">
+      <div className="min-h-screen flex flex-col bg-slate-50 text-slate-900 overflow-x-hidden">
+        <main className="flex-1 max-w-[1440px] w-full mx-auto px-3 sm:px-4 pb-10">
           <OnlineStoreView
             state={state}
             isStandalone={true}
@@ -526,7 +564,7 @@ export default function App() {
               <span className="font-black text-white">متجر {storeName} الإلكتروني</span>
               <span>— جميع الأسعار والأصناف متصلة مباشرة بفرع المكتبة</span>
             </div>
-            <div>📞 للتواصل السريع: {state.settings?.phone} • {state.settings?.address}</div>
+            <div>{state.settings?.phone ? `📞 للتواصل: ${state.settings.phone} • ` : ''}{state.settings?.address}</div>
           </div>
         </footer>
       </div>
@@ -703,6 +741,7 @@ export default function App() {
             onAddExpense={handleAddExpense}
             onTriggerCloudSync={handleTriggerCloudSync}
             onRestoreBackup={handleRestoreBackup}
+            onResetAllData={handleResetAllData}
             onSaveSettings={handleSaveSettings}
           />
         )}

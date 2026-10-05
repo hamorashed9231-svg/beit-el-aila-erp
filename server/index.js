@@ -23,26 +23,48 @@ if (!fs.existsSync(BACKUP_DIR)) fs.mkdirSync(BACKUP_DIR, { recursive: true });
 
 const FIREBASE_DB_URL = 'https://beit-el-aila-erp-default-rtdb.firebaseio.com/state.json';
 
+function normalizeServerDB(parsed) {
+  if (!parsed || typeof parsed !== 'object') return structuredClone(initialDatabase);
+  parsed._initialized = true;
+  const emptyable = [
+    'categories', 'products', 'studyNotes', 'noteReservations',
+    'printJobs', 'suppliers', 'sales', 'onlineOrders',
+    'expenses', 'shifts', 'syncQueue'
+  ];
+  emptyable.forEach(k => {
+    if (!Array.isArray(parsed[k])) parsed[k] = [];
+  });
+  if (!Array.isArray(parsed.users) || parsed.users.length === 0) {
+    parsed.users = structuredClone(initialDatabase.users);
+  }
+  if (!Array.isArray(parsed.customers) || parsed.customers.length === 0) {
+    parsed.customers = structuredClone(initialDatabase.customers);
+  }
+  if (parsed.settings) {
+    if (!parsed.settings.storeName || parsed.settings.storeName === 'مكتبة العيلة') {
+      parsed.settings.storeName = 'بيت العيلة';
+    }
+    if (!parsed.settings.logoUrl) {
+      parsed.settings.logoUrl = '/logo.jpg';
+    }
+  } else {
+    parsed.settings = structuredClone(initialDatabase.settings);
+  }
+  return parsed;
+}
+
 function loadDB() {
   try {
     if (fs.existsSync(DB_FILE)) {
       const raw = fs.readFileSync(DB_FILE, 'utf-8');
-      const parsed = JSON.parse(raw);
-      if (parsed.settings) {
-        if (!parsed.settings.storeName || parsed.settings.storeName === 'مكتبة العيلة') {
-          parsed.settings.storeName = 'بيت العيلة';
-        }
-        if (!parsed.settings.logoUrl) {
-          parsed.settings.logoUrl = '/logo.jpg';
-        }
-      }
-      return parsed;
+      return normalizeServerDB(JSON.parse(raw));
     }
   } catch (err) {
     console.error('Error reading DB file, falling back to seed data:', err);
   }
-  fs.writeFileSync(DB_FILE, JSON.stringify(initialDatabase, null, 2), 'utf-8');
-  return structuredClone(initialDatabase);
+  const clean = structuredClone(initialDatabase);
+  fs.writeFileSync(DB_FILE, JSON.stringify(clean, null, 2), 'utf-8');
+  return clean;
 }
 
 let db = loadDB();
@@ -52,7 +74,7 @@ async function pushToFirebaseCloud() {
     const res = await fetch(FIREBASE_DB_URL, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(db)
+      body: JSON.stringify(normalizeServerDB(db))
     });
     if (res.ok && db.syncQueue) {
       db.syncQueue.forEach(item => { item.status = 'synced'; });
@@ -68,7 +90,7 @@ async function pullFromFirebaseCloud() {
     const res = await fetch(FIREBASE_DB_URL);
     if (res.ok) {
       const cloudData = await res.json();
-      if (cloudData && cloudData.products) {
+      if (cloudData && (cloudData.settings || cloudData._initialized || cloudData.products)) {
         // Merge new online orders & online print jobs submitted by customers on https://beit-el-aila-erp.web.app/store
         if (Array.isArray(cloudData.onlineOrders)) {
           cloudData.onlineOrders.forEach(co => {
@@ -675,9 +697,10 @@ app.patch('/api/online-orders/:id', (req, res) => {
         };
       } else {
         const product = db.products.find(p => p.id === item.id);
-        const cPrice = product ? product.costPrice : item.price * 0.75;
+        const factor = Number(item.factor) || 1;
+        const cPrice = product ? product.costPrice * factor : item.price * 0.75;
         if (product) {
-          product.stock = Math.max(0, product.stock - qty);
+          product.stock = Math.max(0, product.stock - qty * factor);
         }
         totalCost += cPrice * qty;
         return {
@@ -685,10 +708,10 @@ app.patch('/api/online-orders/:id', (req, res) => {
           itemType: 'product',
           name: item.name,
           unitName: item.unitName || 'قطعة',
-          factor: 1,
+          factor,
           quantity: qty,
           unitPrice: item.price,
-          costPrice: cPrice,
+          costPrice: product ? product.costPrice : item.price * 0.75,
           total: item.total
         };
       }
@@ -764,12 +787,18 @@ app.post('/api/sync', async (req, res) => {
 });
 
 app.post('/api/restore', (req, res) => {
-  if (req.body && req.body.products && req.body.sales) {
-    db = req.body;
+  if (req.body && (req.body.settings || req.body.products)) {
+    db = normalizeServerDB(req.body);
     saveDB('RESTORE_BACKUP', 'system');
     return res.json({ success: true, state: db });
   }
   res.status(400).json({ error: 'ملف النسخة الاحتياطية غير صالح' });
+});
+
+app.post('/api/reset', (req, res) => {
+  db = structuredClone(initialDatabase);
+  saveDB('RESET_ALL_DATA', 'system');
+  res.json({ success: true, state: db });
 });
 
 // Serve frontend build if available

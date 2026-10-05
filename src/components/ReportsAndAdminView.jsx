@@ -11,6 +11,7 @@ export default function ReportsAndAdminView({
   onAddExpense,
   onTriggerCloudSync,
   onRestoreBackup,
+  onResetAllData,
   onSaveSettings
 }) {
   const [activeTab, setActiveTab] = useState('profits'); // profits | expenses | users | cloud_sync
@@ -47,7 +48,7 @@ export default function ReportsAndAdminView({
     .reduce((s, sale) => s + Number(sale.paidAmount || 0), 0);
   const creditDeferred = activeSales.reduce((s, sale) => s + Number(sale.remainingAmount || 0), 0);
 
-  const openingShiftCash = state.shifts?.[0]?.openingCash || 1000;
+  const openingShiftCash = state.shifts?.[0]?.openingCash ?? 0;
   const netCashInDrawer = openingShiftCash + cashCollected - totalExpenses;
 
   const handleAddExpSubmit = (e) => {
@@ -445,6 +446,19 @@ export default function ReportsAndAdminView({
                 استرجاع نسخة احتياطية
                 <input type="file" accept=".json" onChange={handleImportJSON} className="hidden" />
               </label>
+              {onResetAllData && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (window.confirm('هل أنت متأكد من تصفير ومسح جميع البيانات (الأصناف، الفواتير، الطلبات، والعملاء) لبدء النظام من الصفر؟')) {
+                      onResetAllData();
+                    }
+                  }}
+                  className="bg-rose-600 hover:bg-rose-700 text-white font-black text-xs px-4 py-3 rounded-2xl flex items-center gap-1.5 shadow"
+                >
+                  تصفير ومسح كل البيانات
+                </button>
+              )}
             </div>
           </div>
 
