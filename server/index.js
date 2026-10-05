@@ -261,6 +261,7 @@ app.post('/api/products', (req, res) => {
   const body = req.body;
   const id = body.id || `PRD-${1000 + db.products.length + 1}`;
   const barcode = body.barcode || `622100${Math.floor(100000 + Math.random() * 900000)}`;
+  const piecesPerCarton = Math.max(1, Number(body.piecesPerCarton) || 1);
 
   const newProduct = {
     id,
@@ -274,6 +275,7 @@ app.post('/api/products', (req, res) => {
     stock: Number(body.stock) || 0,
     minStock: Number(body.minStock) || 10,
     baseUnit: body.baseUnit || 'قطعة',
+    piecesPerCarton,
     location: body.location || 'رف عام',
     showOnline: body.showOnline !== undefined ? body.showOnline : true,
     featured: Boolean(body.featured),
@@ -298,6 +300,25 @@ app.post('/api/products', (req, res) => {
 app.delete('/api/products/:id', (req, res) => {
   db.products = db.products.filter(p => p.id !== req.params.id);
   saveDB('DELETE_PRODUCT', req.params.id);
+  res.json({ success: true, state: db });
+});
+
+// Categories Management (Add / Update / Delete)
+app.post('/api/categories', (req, res) => {
+  const { id, name, icon = 'Package', color = 'emerald' } = req.body;
+  const catId = id || `CAT-${Date.now().toString().slice(-4)}`;
+  const newCat = { id: catId, name, icon, color };
+  if (!db.categories) db.categories = [];
+  const idx = db.categories.findIndex(c => c.id === catId);
+  if (idx >= 0) db.categories[idx] = { ...db.categories[idx], ...newCat };
+  else db.categories.push(newCat);
+  saveDB('SAVE_CATEGORY', catId);
+  res.json({ success: true, category: newCat, state: db });
+});
+
+app.delete('/api/categories/:id', (req, res) => {
+  db.categories = (db.categories || []).filter(c => c.id !== req.params.id);
+  saveDB('DELETE_CATEGORY', req.params.id);
   res.json({ success: true, state: db });
 });
 

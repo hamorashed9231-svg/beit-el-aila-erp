@@ -10,7 +10,9 @@ export default function POSView({
   currentUser,
   onCompleteSale,
   onReturnSale,
-  onPrintReceipt
+  onPrintReceipt,
+  onSaveProduct,
+  onSaveCategory
 }) {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('ALL');
@@ -22,6 +24,7 @@ export default function POSView({
   const [discount, setDiscount] = useState(0);
   const [paidAmountInput, setPaidAmountInput] = useState('');
   const [isWholesale, setIsWholesale] = useState(false);
+  const [scannerToast, setScannerToast] = useState(null);
 
   // Quick print service modal inside POS
   const [quickPrintOpen, setQuickPrintOpen] = useState(false);
@@ -30,7 +33,27 @@ export default function POSView({
   const [qpRate, setQpRate] = useState(1.0);
   const [qpExtra, setQpExtra] = useState(0);
 
+  // Quick Add New Product Modal directly from POS (or when scanning an unknown barcode!)
+  const [quickAddModalOpen, setQuickAddModalOpen] = useState(false);
+  const [qaName, setQaName] = useState('');
+  const [qaBarcode, setQaBarcode] = useState('');
+  const [qaCategory, setQaCategory] = useState('CAT-7');
+  const [qaBaseUnit, setQaBaseUnit] = useState('قطعة');
+  const [qaByCarton, setQaByCarton] = useState(true);
+  const [qaCartonsCount, setQaCartonsCount] = useState(5);
+  const [qaPiecesPerCarton, setQaPiecesPerCarton] = useState(24);
+  const [qaCartonCost, setQaCartonCost] = useState(192);
+  const [qaPieceSell, setQaPieceSell] = useState(10);
+  const [qaCartonSell, setQaCartonSell] = useState(225);
+  const [qaDirectStock, setQaDirectStock] = useState(50);
+  const [qaDirectCost, setQaDirectCost] = useState(7);
+
+  // Quick Add Category Modal inside POS
+  const [quickCatOpen, setQuickCatOpen] = useState(false);
+  const [quickCatName, setQuickCatName] = useState('');
+
   const searchInputRef = useRef(null);
+  const barcodeBufferRef = useRef({ chars: '', lastTime: 0 });
 
   const subtotal = cart.reduce((sum, item) => sum + item.unitPrice * item.quantity, 0);
   const finalTotal = Math.max(0, subtotal - Number(discount || 0));
@@ -44,21 +67,59 @@ export default function POSView({
 
   const selectedCustomer = state.customers.find(c => c.id === selectedCustomerId) || state.customers[0];
 
-  // Keyboard shortcuts
+  const openQuickAddProduct = (prefilledBarcode = '') => {
+    setQaBarcode(prefilledBarcode || `622100${Math.floor(100000 + Math.random() * 900000)}`);
+    setQaName('');
+    setQaCategory(state.categories.find(c => c.id === 'CAT-7')?.id || state.categories[0]?.id || 'CAT-1');
+    setQaBaseUnit('قطعة');
+    setQaByCarton(true);
+    setQaCartonsCount(5);
+    setQaPiecesPerCarton(24);
+    setQaCartonCost(192);
+    setQaPieceSell(10);
+    setQaCartonSell(225);
+    setQuickAddModalOpen(true);
+  };
+
+  // Global Keyboard Shortcuts + Hardware USB/Wireless Barcode Scanner Listener
   useEffect(() => {
     const handleKeyDown = (e) => {
       if (e.key === 'F2') {
         e.preventDefault();
         searchInputRef.current?.focus();
+        return;
       } else if (e.key === 'F4') {
         e.preventDefault();
         if (cart.length > 0) handleHoldCart();
+        return;
       } else if (e.key === 'F8') {
         e.preventDefault();
         toggleWholesaleMode();
+        return;
       } else if (e.key === 'F9') {
         e.preventDefault();
         if (cart.length > 0) handleCheckout();
+        return;
+      }
+
+      // Hardware Barcode Gun Detection when user is NOT typing in an input field
+      const tag = document.activeElement?.tagName;
+      const isTypingInInput = tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT';
+      if (!isTypingInInput && !quickAddModalOpen && !quickPrintOpen && !quickCatOpen) {
+        const now = Date.now();
+        if (e.key === 'Enter' && barcodeBufferRef.current.chars.length >= 3) {
+          e.preventDefault();
+          const scannedCode = barcodeBufferRef.current.chars.trim();
+          barcodeBufferRef.current.chars = '';
+          processScannedOrSearchedCode(scannedCode);
+        } else if (e.key.length === 1 && !e.ctrlKey && !e.altKey && !e.metaKey) {
+          // Reset buffer if more than 120ms elapsed since previous character
+          if (now - barcodeBufferRef.current.lastTime > 120) {
+            barcodeBufferRef.current.chars = '';
+          }
+          barcodeBufferRef.current.chars += e.key;
+          barcodeBufferRef.current.lastTime = now;
+        }
       }
     };
     window.addEventListener('keydown', handleKeyDown);
@@ -177,10 +238,9 @@ export default function POSView({
     setQuickPrintOpen(false);
   };
 
-  // Barcode scan or Enter key in search input
-  const handleBarcodeSearchSubmit = (e) => {
-    e.preventDefault();
-    const q = searchQuery.trim();
+  // Process Barcode Scan (from Laser/USB gun or Search Input)
+  const processScannedOrSearchedCode = (rawCode) => {
+    const q = (rawCode || '').trim();
     if (!q) return;
 
     // 1. Check exact unit barcode or product barcode or SKU
@@ -188,6 +248,8 @@ export default function POSView({
       if (prod.barcode === q || prod.sku?.toLowerCase() === q.toLowerCase()) {
         addProductToCart(prod);
         setSearchQuery('');
+        setScannerToast(`تمت إضافة: ${prod.name} ✓`);
+        setTimeout(() => setScannerToast(null), 2200);
         return;
       }
       if (prod.units) {
@@ -195,6 +257,8 @@ export default function POSView({
         if (matchedUnit) {
           addProductToCart(prod, matchedUnit);
           setSearchQuery('');
+          setScannerToast(`تمت إضافة: ${prod.name} (${matchedUnit.name}) ✓`);
+          setTimeout(() => setScannerToast(null), 2200);
           return;
         }
       }
@@ -207,15 +271,102 @@ export default function POSView({
     if (matchedNote) {
       addStudyNoteToCart(matchedNote);
       setSearchQuery('');
+      setScannerToast(`تمت إضافة مذكرة: ${matchedNote.title} ✓`);
+      setTimeout(() => setScannerToast(null), 2200);
       return;
     }
 
     // 3. If single product matches name search, add it directly
-    const matchingProds = state.products.filter(p => p.name.includes(q));
+    const matchingProds = state.products.filter(p => p.name.toLowerCase().includes(q.toLowerCase()));
     if (matchingProds.length === 1) {
       addProductToCart(matchingProds[0]);
       setSearchQuery('');
+      setScannerToast(`تمت إضافة: ${matchingProds[0].name} ✓`);
+      setTimeout(() => setScannerToast(null), 2200);
+      return;
     }
+
+    // 4. If no product matched (e.g. new Chipsy/Gift barcode scanned or new product name typed),
+    // open the Quick Add Product modal with the barcode or name pre-filled!
+    if (/^\d{4,}$/.test(q)) {
+      openQuickAddProduct(q);
+      setSearchQuery('');
+    } else if (matchingProds.length === 0) {
+      setQaBarcode(`622100${Math.floor(100000 + Math.random() * 900000)}`);
+      setQaName(q);
+      setQaCategory(state.categories.find(c => c.id === 'CAT-7')?.id || state.categories[0]?.id || 'CAT-1');
+      setQaBaseUnit('قطعة');
+      setQaByCarton(true);
+      setQuickAddModalOpen(true);
+    }
+  };
+
+  // Barcode scan or Enter key in search input
+  const handleBarcodeSearchSubmit = (e) => {
+    e.preventDefault();
+    if (!searchQuery.trim()) {
+      // If user clicked "إضافة" while search box is empty, open the New Product Modal!
+      openQuickAddProduct('');
+      return;
+    }
+    processScannedOrSearchedCode(searchQuery);
+  };
+
+  const handleSaveQuickProductSubmit = async (e) => {
+    e.preventDefault();
+    if (!qaName.trim()) return;
+    const ppc = qaByCarton ? Math.max(1, Number(qaPiecesPerCarton) || 1) : 1;
+    const totalStock = qaByCarton
+      ? Math.max(0, Number(qaCartonsCount) || 0) * ppc
+      : Math.max(0, Number(qaDirectStock) || 0);
+    const pieceCost = qaByCarton
+      ? Number((Number(qaCartonCost || 0) / ppc).toFixed(2))
+      : Number(qaDirectCost || 0);
+    const pieceSell = Number(qaPieceSell || 0);
+    const cartonSell = Number(qaCartonSell || pieceSell * ppc);
+    const barcode = qaBarcode.trim() || `622100${Math.floor(100000 + Math.random() * 900000)}`;
+    const newId = `PRD-${1000 + state.products.length + 1}`;
+
+    const units = [
+      { name: qaBaseUnit || 'قطعة', factor: 1, price: pieceSell, barcode }
+    ];
+    if (qaByCarton && ppc > 1) {
+      units.push({
+        name: `كرتونة (${ppc} ${qaBaseUnit || 'قطعة'})`,
+        factor: ppc,
+        price: cartonSell,
+        barcode: `${barcode}2`
+      });
+    }
+
+    const newProduct = {
+      id: newId,
+      name: qaName.trim(),
+      barcode,
+      sku: `SKU-${Date.now().toString().slice(-4)}`,
+      category: qaCategory,
+      costPrice: pieceCost,
+      sellPrice: pieceSell,
+      wholesalePrice: Math.max(pieceCost, pieceSell - 1),
+      stock: totalStock,
+      minStock: ppc > 1 ? ppc : 10,
+      baseUnit: qaBaseUnit || 'قطعة',
+      piecesPerCarton: ppc,
+      location: 'رف المعرض',
+      showOnline: true,
+      featured: false,
+      image: 'https://images.unsplash.com/photo-1566478989037-eec170784d0b?auto=format&fit=crop&w=400&q=80',
+      units
+    };
+
+    if (onSaveProduct) {
+      await onSaveProduct(newProduct);
+    }
+    addProductToCart(newProduct, units[0]);
+    setQuickAddModalOpen(false);
+    setSearchQuery('');
+    setScannerToast(`تم تعريف الصنف "${newProduct.name}" وإضافته للفاتورة فوراً ✓`);
+    setTimeout(() => setScannerToast(null), 3000);
   };
 
   const updateCartItemQty = (cartItemId, delta) => {
@@ -386,8 +537,17 @@ export default function POSView({
               </button>
             </div>
 
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               <button
+                type="button"
+                onClick={() => openQuickAddProduct('')}
+                className="px-3 py-2 rounded-xl text-xs font-black bg-blue-600 text-white hover:bg-blue-700 flex items-center gap-1.5 shadow-sm transition"
+              >
+                <Plus className="w-4 h-4" />
+                + تعريف صنف جديد (بالكرتونة/القطعة)
+              </button>
+              <button
+                type="button"
                 onClick={() => setQuickPrintOpen(true)}
                 className="px-3 py-2 rounded-xl text-xs font-bold bg-emerald-50 text-emerald-800 border border-emerald-200 hover:bg-emerald-100 flex items-center gap-1.5 transition"
               >
@@ -395,6 +555,7 @@ export default function POSView({
                 + تصوير/طباعة سريعة
               </button>
               <button
+                type="button"
                 onClick={toggleWholesaleMode}
                 title="اختصار F8"
                 className={`px-3 py-2 rounded-xl text-xs font-bold border flex items-center gap-1.5 transition ${
@@ -409,6 +570,14 @@ export default function POSView({
             </div>
           </div>
 
+          {/* Scanner Live Toast Alert */}
+          {scannerToast && (
+            <div className="bg-emerald-600 text-white px-3.5 py-2 rounded-xl text-xs font-black flex items-center justify-between animate-pulse">
+              <span>⚡ قارئ الباركود: {scannerToast}</span>
+              <span className="text-[10px] bg-white/20 px-2 py-0.5 rounded">جاهز للمسح التالي</span>
+            </div>
+          )}
+
           {/* Barcode & Smart Search Form */}
           <form onSubmit={handleBarcodeSearchSubmit} className="relative">
             <Barcode className="w-5 h-5 text-emerald-600 absolute right-3.5 top-1/2 -translate-y-1/2" />
@@ -417,15 +586,21 @@ export default function POSView({
               type="text"
               value={searchQuery}
               onChange={e => setSearchQuery(e.target.value)}
-              placeholder="امسح الباركود بمسدس الليزر (قطعة / دستة / كرتونة) أو ابحث باسم الصنف أو كود المذكرة... (F2)"
-              className="w-full pr-11 pl-24 py-3 rounded-xl border-2 border-slate-200 focus:border-emerald-600 focus:ring-4 focus:ring-emerald-500/10 outline-none text-sm font-bold transition"
+              placeholder="امسح الباركود بجهاز الليزر في أي وقت (كيس / قطعة / كرتونة) أو ابحث بالاسم... (F2)"
+              className="w-full pr-11 pl-32 py-3 rounded-xl border-2 border-slate-200 focus:border-emerald-600 focus:ring-4 focus:ring-emerald-500/10 outline-none text-sm font-bold transition"
             />
-            <button
-              type="submit"
-              className="absolute left-2 top-1/2 -translate-y-1/2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold px-3.5 py-1.5 rounded-lg transition"
-            >
-              إضافة
-            </button>
+            <div className="absolute left-2 top-1/2 -translate-y-1/2 flex items-center gap-1">
+              <span className="hidden sm:inline-flex items-center gap-1 text-[10px] font-bold bg-emerald-50 text-emerald-700 px-2 py-1 rounded-md border border-emerald-200">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-ping" />
+                قارئ الباركود متصل
+              </span>
+              <button
+                type="submit"
+                className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold px-3.5 py-1.5 rounded-lg transition"
+              >
+                إضافة
+              </button>
+            </div>
           </form>
 
           {/* Category Pills when in Products tab */}
@@ -454,6 +629,14 @@ export default function POSView({
                   {cat.name}
                 </button>
               ))}
+              <button
+                type="button"
+                onClick={() => setQuickCatOpen(true)}
+                className="px-3 py-1.5 rounded-lg text-xs font-black whitespace-nowrap bg-purple-50 text-purple-700 border border-purple-200 hover:bg-purple-100 flex items-center gap-1 transition"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                قسم جديد
+              </button>
             </div>
           )}
         </div>
@@ -931,6 +1114,246 @@ export default function POSView({
               <button
                 type="button"
                 onClick={() => setQuickPrintOpen(false)}
+                className="bg-slate-200 text-slate-800 font-bold py-2.5 px-4 rounded-xl"
+              >
+                إلغاء
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
+
+      {/* Quick Add New Product Modal (Triggered from POS or when scanning an unknown barcode!) */}
+      {quickAddModalOpen && (
+        <div className="fixed inset-0 z-50 bg-slate-900/70 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
+          <form
+            onSubmit={handleSaveQuickProductSubmit}
+            className="bg-white rounded-2xl shadow-2xl max-w-lg w-full p-5 border border-slate-200 space-y-3.5 text-xs max-h-[92vh] overflow-y-auto"
+          >
+            <div className="flex items-center justify-between border-b border-slate-200 pb-3">
+              <div>
+                <h3 className="font-black text-base text-slate-900 flex items-center gap-2">
+                  <Barcode className="w-5 h-5 text-blue-600" />
+                  تعريف منتج جديد سريع (وإضافته للفاتورة فوراً)
+                </h3>
+                <p className="text-[11px] text-slate-500">
+                  سواء شيبسي، هدايا، ألعاب، أو أدوات مكتبية — ضيفه بالكرتونة أو بالقطعة وهيسمّع في المخزن فوراً
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setQuickAddModalOpen(false)}
+                className="text-slate-500 font-bold"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div className="sm:col-span-2">
+                <label className="block font-bold mb-1">اسم الصنف</label>
+                <input
+                  type="text"
+                  required
+                  autoFocus
+                  value={qaName}
+                  onChange={e => setQaName(e.target.value)}
+                  placeholder="مثال: شيبسي عائلي / شيكولاتة كادبوري / لعبة / قلم..."
+                  className="w-full rounded-xl border-2 border-blue-400 px-3 py-2 font-black text-sm outline-none"
+                />
+              </div>
+
+              <div>
+                <label className="block font-bold mb-1">الباركود (امسحه بالجهاز أو اتركه تلقائي)</label>
+                <input
+                  type="text"
+                  value={qaBarcode}
+                  onChange={e => setQaBarcode(e.target.value)}
+                  className="w-full rounded-xl border border-slate-300 px-3 py-2 font-mono font-bold"
+                />
+              </div>
+
+              <div>
+                <label className="block font-bold mb-1">القسم</label>
+                <select
+                  value={qaCategory}
+                  onChange={e => setQaCategory(e.target.value)}
+                  className="w-full rounded-xl border border-slate-300 px-3 py-2 font-bold bg-white"
+                >
+                  {state.categories.map(c => (
+                    <option key={c.id} value={c.id}>{c.name}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            {/* Carton vs Piece Switcher */}
+            <div className="bg-blue-50/70 p-3.5 rounded-2xl border border-blue-200 space-y-3">
+              <div className="flex items-center justify-between">
+                <span className="font-black text-blue-950">طريقة إضافة المخزون:</span>
+                <div className="flex bg-white rounded-xl p-1 border border-blue-200">
+                  <button
+                    type="button"
+                    onClick={() => setQaByCarton(true)}
+                    className={`px-3 py-1 rounded-lg font-black transition ${
+                      qaByCarton ? 'bg-blue-600 text-white' : 'text-slate-600'
+                    }`}
+                  >
+                    📦 بالكرتونة (وعدد القطع داخلها)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setQaByCarton(false)}
+                    className={`px-3 py-1 rounded-lg font-black transition ${
+                      !qaByCarton ? 'bg-slate-900 text-white' : 'text-slate-600'
+                    }`}
+                  >
+                    🔢 بالقطعة الفردية
+                  </button>
+                </div>
+              </div>
+
+              {qaByCarton ? (
+                <div className="grid grid-cols-2 gap-2.5">
+                  <div className="bg-white p-2 rounded-xl border border-blue-200">
+                    <label className="block font-black text-blue-900 mb-1">عدد الكراتين</label>
+                    <input
+                      type="number"
+                      min="1"
+                      value={qaCartonsCount}
+                      onChange={e => setQaCartonsCount(e.target.value)}
+                      className="w-full rounded-lg border border-slate-300 px-2.5 py-1.5 font-black text-sm"
+                    />
+                  </div>
+                  <div className="bg-white p-2 rounded-xl border border-blue-200">
+                    <label className="block font-black text-blue-900 mb-1">عدد القطع داخل الكرتونة</label>
+                    <input
+                      type="number"
+                      min="1"
+                      value={qaPiecesPerCarton}
+                      onChange={e => setQaPiecesPerCarton(e.target.value)}
+                      className="w-full rounded-lg border border-slate-300 px-2.5 py-1.5 font-black text-sm text-blue-700"
+                    />
+                  </div>
+                  <div className="bg-white p-2 rounded-xl border border-blue-200">
+                    <label className="block font-bold text-slate-700 mb-1">سعر شراء الكرتونة جملة</label>
+                    <input
+                      type="number"
+                      step="0.25"
+                      value={qaCartonCost}
+                      onChange={e => setQaCartonCost(e.target.value)}
+                      className="w-full rounded-lg border border-slate-300 px-2.5 py-1.5 font-bold text-sm"
+                    />
+                  </div>
+                  <div className="bg-white p-2 rounded-xl border border-blue-200">
+                    <label className="block font-black text-emerald-800 mb-1">سعر بيع القطعة للعميل</label>
+                    <input
+                      type="number"
+                      step="0.25"
+                      value={qaPieceSell}
+                      onChange={e => {
+                        setQaPieceSell(e.target.value);
+                        setQaCartonSell(Number(e.target.value) * Number(qaPiecesPerCarton));
+                      }}
+                      className="w-full rounded-lg border border-emerald-400 px-2.5 py-1.5 font-black text-sm text-emerald-700"
+                    />
+                  </div>
+                  <div className="col-span-2 bg-slate-900 text-white p-2.5 rounded-xl flex items-center justify-between">
+                    <span>الرصيد الإجمالي الذي سيُضاف للمخزن:</span>
+                    <span className="font-black text-sm text-emerald-400">
+                      {Number(qaCartonsCount) * Number(qaPiecesPerCarton)} قطعة (ويُخصم تلقائياً مع كل بيعة)
+                    </span>
+                  </div>
+                </div>
+              ) : (
+                <div className="grid grid-cols-3 gap-2">
+                  <div className="bg-white p-2 rounded-xl border border-slate-200">
+                    <label className="block font-bold mb-1">الكمية (بالقطعة)</label>
+                    <input
+                      type="number"
+                      min="1"
+                      value={qaDirectStock}
+                      onChange={e => setQaDirectStock(e.target.value)}
+                      className="w-full rounded-lg border border-slate-300 px-2 py-1.5 font-black"
+                    />
+                  </div>
+                  <div className="bg-white p-2 rounded-xl border border-slate-200">
+                    <label className="block font-bold mb-1">تكلفة القطعة</label>
+                    <input
+                      type="number"
+                      step="0.25"
+                      value={qaDirectCost}
+                      onChange={e => setQaDirectCost(e.target.value)}
+                      className="w-full rounded-lg border border-slate-300 px-2 py-1.5 font-bold"
+                    />
+                  </div>
+                  <div className="bg-white p-2 rounded-xl border border-slate-200">
+                    <label className="block font-black text-emerald-800 mb-1">سعر بيع القطعة</label>
+                    <input
+                      type="number"
+                      step="0.25"
+                      value={qaPieceSell}
+                      onChange={e => setQaPieceSell(e.target.value)}
+                      className="w-full rounded-lg border border-emerald-400 px-2 py-1.5 font-black text-emerald-700"
+                    />
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div className="flex gap-2">
+              <button
+                type="submit"
+                className="flex-1 bg-blue-600 hover:bg-blue-700 text-white font-black py-3 rounded-xl shadow"
+              >
+                حفظ الصنف في المخزن وإضافته للفاتورة الآن
+              </button>
+              <button
+                type="button"
+                onClick={() => setQuickAddModalOpen(false)}
+                className="bg-slate-200 text-slate-800 font-bold py-3 px-5 rounded-xl"
+              >
+                إلغاء
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
+
+      {/* Quick Add Category Modal inside POS */}
+      {quickCatOpen && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <form
+            onSubmit={async (e) => {
+              e.preventDefault();
+              if (!quickCatName.trim()) return;
+              const newId = await onSaveCategory?.({ name: quickCatName.trim() });
+              if (newId) setSelectedCategory(newId);
+              setQuickCatName('');
+              setQuickCatOpen(false);
+            }}
+            className="bg-white rounded-2xl shadow-2xl max-w-sm w-full p-5 border border-slate-200 space-y-4 text-xs"
+          >
+            <h3 className="font-black text-base text-slate-900">إضافة قسم جديد للمكتبة</h3>
+            <div>
+              <label className="block font-bold mb-1">اسم القسم الجديد</label>
+              <input
+                type="text"
+                required
+                autoFocus
+                value={quickCatName}
+                onChange={e => setQuickCatName(e.target.value)}
+                placeholder="مثال: شيبسي وسناكس / مشروبات / عطور وهدايا..."
+                className="w-full rounded-xl border-2 border-purple-400 px-3 py-2 font-bold outline-none"
+              />
+            </div>
+            <div className="flex gap-2">
+              <button type="submit" className="flex-1 bg-purple-600 text-white font-black py-2.5 rounded-xl">
+                إضافة القسم
+              </button>
+              <button
+                type="button"
+                onClick={() => setQuickCatOpen(false)}
                 className="bg-slate-200 text-slate-800 font-bold py-2.5 px-4 rounded-xl"
               >
                 إلغاء

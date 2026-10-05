@@ -193,6 +193,25 @@ export default function App() {
     });
   };
 
+  const handleSaveCategory = async (catPayload) => {
+    const catId = catPayload.id || `CAT-${Date.now().toString().slice(-4)}`;
+    await mutateState('/api/categories', 'POST', { ...catPayload, id: catId }, (draft) => {
+      if (!draft.categories) draft.categories = [];
+      const idx = draft.categories.findIndex(c => c.id === catId);
+      if (idx >= 0) draft.categories[idx] = { ...draft.categories[idx], ...catPayload, id: catId };
+      else draft.categories.push({ id: catId, name: catPayload.name, icon: catPayload.icon || 'Package', color: catPayload.color || 'emerald' });
+      return draft;
+    });
+    return catId;
+  };
+
+  const handleDeleteCategory = async (catId) => {
+    await mutateState(`/api/categories/${catId}`, 'DELETE', null, (draft) => {
+      draft.categories = (draft.categories || []).filter(c => c.id !== catId);
+      return draft;
+    });
+  };
+
   const handleCreatePurchase = async (purchasePayload) => {
     await mutateState('/api/purchases', 'POST', purchasePayload, (draft) => {
       let totalCost = 0;
@@ -626,6 +645,8 @@ export default function App() {
             onCompleteSale={handleCompleteSale}
             onReturnSale={handleReturnSale}
             onPrintReceipt={(sale) => setActiveReceiptSale(sale)}
+            onSaveProduct={handleSaveProduct}
+            onSaveCategory={handleSaveCategory}
           />
         )}
 
@@ -635,6 +656,8 @@ export default function App() {
             onSaveProduct={handleSaveProduct}
             onDeleteProduct={handleDeleteProduct}
             onCreatePurchase={handleCreatePurchase}
+            onSaveCategory={handleSaveCategory}
+            onDeleteCategory={handleDeleteCategory}
             onOpenBarcodeModal={(item) => setActiveBarcodeItem(item)}
           />
         )}

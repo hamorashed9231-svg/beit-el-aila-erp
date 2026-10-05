@@ -12,7 +12,7 @@
     "freeDeliveryThreshold": 500,
     "cloudSyncEnabled": true,
     "cloudEndpoint": "https://cloud-sync.beit-elaila.eg/api/v1/sync",
-    "lastSyncTime": "2026-10-04T01:08:50.830Z",
+    "lastSyncTime": "2026-10-05T06:00:38.543Z",
     "branchId": "MAIN-POS-01",
     "printPrices": {
       "bwSingleA4": 1,
@@ -133,9 +133,21 @@
     },
     {
       "id": "CAT-6",
-      "name": "هدايا وألعاب وشنط مدرسية",
+      "name": "هدايا وشنط مدرسية",
       "icon": "Gift",
       "color": "rose"
+    },
+    {
+      "id": "CAT-7",
+      "name": "شيبسي وسناكس وحلويات ومشروبات",
+      "icon": "Coffee",
+      "color": "orange"
+    },
+    {
+      "id": "CAT-8",
+      "name": "ألعاب أطفال وإكسسوارات وخردوات",
+      "icon": "Gamepad2",
+      "color": "indigo"
     }
   ],
   "products": [
@@ -505,6 +517,7 @@
       "stock": 14,
       "minStock": 5,
       "baseUnit": "قطعة",
+      "piecesPerCarton": 1,
       "location": "قسم الشنط والهدايا",
       "showOnline": true,
       "featured": true,
@@ -515,6 +528,134 @@
           "factor": 1,
           "price": 480,
           "barcode": "622100600101"
+        }
+      ]
+    },
+    {
+      "id": "PRD-1014",
+      "barcode": "622100700101",
+      "sku": "SNK-CHIPSY-LG",
+      "name": "شيبسي عائلي كبير (جبنة متبلة / شطة وليمون / طماطم)",
+      "category": "CAT-7",
+      "costPrice": 8.25,
+      "sellPrice": 10,
+      "wholesalePrice": 9,
+      "stock": 120,
+      "minStock": 24,
+      "baseUnit": "كيس",
+      "piecesPerCarton": 24,
+      "location": "ستاند الشيبسي والسناكس",
+      "showOnline": true,
+      "featured": true,
+      "image": "https://images.unsplash.com/photo-1566478989037-eec170784d0b?auto=format&fit=crop&w=400&q=80",
+      "units": [
+        {
+          "name": "كيس",
+          "factor": 1,
+          "price": 10,
+          "barcode": "622100700101"
+        },
+        {
+          "name": "كرتونة (24 كيس)",
+          "factor": 24,
+          "price": 225,
+          "barcode": "622100700102"
+        }
+      ]
+    },
+    {
+      "id": "PRD-1015",
+      "barcode": "622100700201",
+      "sku": "SNK-MOLTO-XXL",
+      "name": "مولتو ماجنم شوكولاتة وبندق (Molto Magnum)",
+      "category": "CAT-7",
+      "costPrice": 12,
+      "sellPrice": 15,
+      "wholesalePrice": 13.5,
+      "stock": 72,
+      "minStock": 24,
+      "baseUnit": "قطعة",
+      "piecesPerCarton": 24,
+      "location": "ستاند الحلويات والمولتو",
+      "showOnline": true,
+      "featured": true,
+      "image": "https://images.unsplash.com/photo-1558961363-fa8fdf82db35?auto=format&fit=crop&w=400&q=80",
+      "units": [
+        {
+          "name": "قطعة",
+          "factor": 1,
+          "price": 15,
+          "barcode": "622100700201"
+        },
+        {
+          "name": "علبة / كرتونة (24 قطعة)",
+          "factor": 24,
+          "price": 330,
+          "barcode": "622100700202"
+        }
+      ]
+    },
+    {
+      "id": "PRD-1016",
+      "barcode": "622100600201",
+      "sku": "GFT-BOX-LUX",
+      "name": "بوكس هدايا قطيفة فاخر للساعات والإكسسوارات والبرفانات",
+      "category": "CAT-6",
+      "costPrice": 32,
+      "sellPrice": 50,
+      "wholesalePrice": 40,
+      "stock": 36,
+      "minStock": 6,
+      "baseUnit": "قطعة",
+      "piecesPerCarton": 12,
+      "location": "فاترينة الهدايا - 2",
+      "showOnline": true,
+      "featured": true,
+      "image": "https://images.unsplash.com/photo-1549465220-1a8b9238cd48?auto=format&fit=crop&w=400&q=80",
+      "units": [
+        {
+          "name": "قطعة",
+          "factor": 1,
+          "price": 50,
+          "barcode": "622100600201"
+        },
+        {
+          "name": "دستة (12 بوكس)",
+          "factor": 12,
+          "price": 500,
+          "barcode": "622100600202"
+        }
+      ]
+    },
+    {
+      "id": "PRD-1017",
+      "barcode": "622100800101",
+      "sku": "TOY-RUBIK-3X3",
+      "name": "مكعب روبيك ذكي سريع (Rubik's Cube) وألعاب ذكاء",
+      "category": "CAT-8",
+      "costPrice": 45,
+      "sellPrice": 70,
+      "wholesalePrice": 55,
+      "stock": 24,
+      "minStock": 6,
+      "baseUnit": "قطعة",
+      "piecesPerCarton": 12,
+      "location": "قسم الألعاب والهدايا",
+      "showOnline": true,
+      "featured": false,
+      "image": "https://images.unsplash.com/photo-1591991731833-b4807cf7ef94?auto=format&fit=crop&w=400&q=80",
+      "units": [
+        {
+          "name": "قطعة",
+          "factor": 1,
+          "price": 70,
+          "barcode": "622100800101"
+        },
+        {
+          "name": "كرتونة (12 قطعة)",
+          "factor": 12,
+          "price": 720,
+          "barcode": "622100800102"
         }
       ]
     }
@@ -605,7 +746,7 @@
       "paidAmount": 50,
       "remainingAmount": 45,
       "status": "ready",
-      "createdAt": "2026-10-03T01:06:43.533Z"
+      "createdAt": "2026-10-04T06:00:38.545Z"
     },
     {
       "id": "RES-902",
@@ -618,7 +759,7 @@
       "paidAmount": 200,
       "remainingAmount": 0,
       "status": "printing",
-      "createdAt": "2026-10-03T20:06:43.533Z"
+      "createdAt": "2026-10-05T01:00:38.545Z"
     }
   ],
   "printJobs": [
@@ -638,7 +779,7 @@
       "paidAmount": 500,
       "status": "completed",
       "source": "pos",
-      "createdAt": "2026-10-03T22:06:43.533Z"
+      "createdAt": "2026-10-05T03:00:38.545Z"
     },
     {
       "id": "PRJ-502",
@@ -657,7 +798,7 @@
       "paidAmount": 0,
       "status": "pending",
       "source": "online",
-      "createdAt": "2026-10-04T00:36:43.533Z"
+      "createdAt": "2026-10-05T05:30:38.545Z"
     }
   ],
   "customers": [
@@ -686,14 +827,14 @@
       "transactions": [
         {
           "id": "TR-1",
-          "date": "2026-09-29T01:06:43.533Z",
+          "date": "2026-09-30T06:00:38.545Z",
           "type": "invoice",
           "amount": 2450,
           "description": "فاتورة توريد ورق تصوير وأقلام #INV-1001"
         },
         {
           "id": "TR-2",
-          "date": "2026-10-02T01:06:43.533Z",
+          "date": "2026-10-03T06:00:38.545Z",
           "type": "payment",
           "amount": 1000,
           "description": "دفعة نقدية تحت الحساب"
@@ -713,7 +854,7 @@
       "transactions": [
         {
           "id": "TR-3",
-          "date": "2026-10-01T01:06:43.533Z",
+          "date": "2026-10-02T06:00:38.545Z",
           "type": "invoice",
           "amount": 680,
           "description": "تصوير امتحانات شاملة وأقلام وايت بورد"
@@ -733,7 +874,7 @@
       "transactions": [
         {
           "id": "TR-4",
-          "date": "2026-10-03T01:06:43.533Z",
+          "date": "2026-10-04T06:00:38.545Z",
           "type": "invoice",
           "amount": 220,
           "description": "باقي حساب كتب خارجية"
@@ -753,14 +894,14 @@
       "transactions": [
         {
           "id": "STR-1",
-          "date": "2026-09-27T01:06:43.533Z",
+          "date": "2026-09-28T06:00:38.545Z",
           "type": "purchase",
           "amount": 8500,
           "description": "فاتورة مشتريات كشاكيل منترا وأقلام روتو"
         },
         {
           "id": "STR-2",
-          "date": "2026-10-01T01:06:43.533Z",
+          "date": "2026-10-02T06:00:38.545Z",
           "type": "payment",
           "amount": 4000,
           "description": "تحويل إنستا باي للمندوب"
@@ -778,14 +919,14 @@
       "transactions": [
         {
           "id": "STR-3",
-          "date": "2026-09-30T01:06:43.533Z",
+          "date": "2026-10-01T06:00:38.545Z",
           "type": "purchase",
           "amount": 13200,
           "description": "توريد دفعة كتب الترم الجديد"
         },
         {
           "id": "STR-4",
-          "date": "2026-09-30T01:06:43.533Z",
+          "date": "2026-10-01T06:00:38.545Z",
           "type": "payment",
           "amount": 10000,
           "description": "سداد نقدي عند الاستلام"
@@ -806,7 +947,7 @@
   "sales": [
     {
       "id": "INV-1001",
-      "createdAt": "2026-10-03T21:06:43.533Z",
+      "createdAt": "2026-10-05T02:00:38.545Z",
       "cashierName": "أحمد محمود",
       "customerId": "CUS-1",
       "customerName": "عميل نقدي (كاشير)",
@@ -855,7 +996,7 @@
     },
     {
       "id": "INV-1002",
-      "createdAt": "2026-10-03T23:06:43.533Z",
+      "createdAt": "2026-10-05T04:00:38.545Z",
       "cashierName": "أحمد محمود",
       "customerId": "CUS-2",
       "customerName": "حضانة وأكاديمية البراعم الحديثة",
@@ -906,7 +1047,7 @@
       "deliveryFee": 25,
       "total": 520,
       "status": "new",
-      "createdAt": "2026-10-04T00:46:43.533Z",
+      "createdAt": "2026-10-05T05:40:38.545Z",
       "items": [
         {
           "id": "PRD-1006",
@@ -949,7 +1090,7 @@
       "deliveryFee": 0,
       "total": 230,
       "status": "preparing",
-      "createdAt": "2026-10-03T23:36:43.533Z",
+      "createdAt": "2026-10-05T04:30:38.545Z",
       "items": [
         {
           "id": "PRD-1007",
@@ -979,7 +1120,7 @@
       "category": "مستلزمات طباعة وأحبار",
       "amount": 950,
       "paidBy": "أ/ زياد راشد",
-      "createdAt": "2026-10-02T01:06:43.533Z"
+      "createdAt": "2026-10-03T06:00:38.545Z"
     },
     {
       "id": "EXP-2",
@@ -987,7 +1128,7 @@
       "category": "مرافق وفواتير",
       "amount": 620,
       "paidBy": "أحمد محمود",
-      "createdAt": "2026-10-03T01:06:43.533Z"
+      "createdAt": "2026-10-04T06:00:38.545Z"
     },
     {
       "id": "EXP-3",
@@ -995,14 +1136,14 @@
       "category": "تغليف ومطبوعات",
       "amount": 350,
       "paidBy": "أحمد محمود",
-      "createdAt": "2026-10-04T01:06:43.533Z"
+      "createdAt": "2026-10-05T06:00:38.545Z"
     }
   ],
   "shifts": [
     {
       "id": "SHF-101",
       "cashierName": "أحمد محمود",
-      "openedAt": "2026-10-03T19:06:43.533Z",
+      "openedAt": "2026-10-05T00:00:38.545Z",
       "closedAt": null,
       "openingCash": 1000,
       "status": "open",
@@ -1014,7 +1155,7 @@
       "id": "SYNC-1",
       "action": "INIT_CLOUD_REPLICA",
       "entity": "system",
-      "timestamp": "2026-10-04T00:06:43.533Z",
+      "timestamp": "2026-10-05T05:00:38.545Z",
       "status": "synced"
     }
   ]

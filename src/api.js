@@ -16,6 +16,19 @@ function normalizeState(parsed) {
       parsed[key] = initialDatabase[key] ? structuredClone(initialDatabase[key]) : [];
     }
   });
+  // Ensure new categories (e.g. شيبسي وسناكس, ألعاب وإكسسوارات) exist even on older cached states
+  initialDatabase.categories.forEach(seedCat => {
+    if (!parsed.categories.some(c => c.id === seedCat.id)) {
+      parsed.categories.push(structuredClone(seedCat));
+    }
+  });
+  // Ensure new sample snacks/gifts products exist if missing
+  ['PRD-1014', 'PRD-1015', 'PRD-1016', 'PRD-1017'].forEach(pid => {
+    if (!parsed.products.some(p => p.id === pid)) {
+      const found = initialDatabase.products.find(p => p.id === pid);
+      if (found) parsed.products.push(structuredClone(found));
+    }
+  });
   if (!parsed.settings) {
     parsed.settings = structuredClone(initialDatabase.settings);
   } else {

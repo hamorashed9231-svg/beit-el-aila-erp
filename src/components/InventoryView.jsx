@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import {
   Package, Plus, Search, AlertTriangle, Edit3, Trash2, Barcode,
-  Truck, Layers, CheckCircle2, Globe, DollarSign, Archive
+  Truck, Layers, CheckCircle2, Globe, DollarSign, Archive, Box
 } from 'lucide-react';
 
 export default function InventoryView({
@@ -9,22 +9,39 @@ export default function InventoryView({
   onSaveProduct,
   onDeleteProduct,
   onCreatePurchase,
+  onSaveCategory,
+  onDeleteCategory,
   onOpenBarcodeModal
 }) {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('ALL');
   const [onlyLowStock, setOnlyLowStock] = useState(false);
 
+  // Add / Manage Categories Modal State
+  const [catModalOpen, setCatModalOpen] = useState(false);
+  const [newCatName, setNewCatName] = useState('');
+  const [inlineNewCatName, setInlineNewCatName] = useState('');
+  const [showInlineCat, setShowInlineCat] = useState(false);
+
   // Add / Edit Product Modal State
   const [modalOpen, setModalOpen] = useState(false);
   const [editingProduct, setEditingProduct] = useState(null);
+  const [entryMode, setEntryMode] = useState('carton'); // 'carton' | 'piece'
+  const [cartonsCountInput, setCartonsCountInput] = useState(5);
+  const [piecesPerCartonInput, setPiecesPerCartonInput] = useState(24);
+  const [extraLoosePiecesInput, setExtraLoosePiecesInput] = useState(0);
+  const [cartonCostInput, setCartonCostInput] = useState(192);
+  const [cartonSellPriceInput, setCartonSellPriceInput] = useState(225);
 
   // Purchase / Restock Modal State
   const [purchaseModalOpen, setPurchaseModalOpen] = useState(false);
   const [purchaseSupplierId, setPurchaseSupplierId] = useState(state.suppliers[0]?.id || 'SUP-1');
   const [purchaseProductId, setPurchaseProductId] = useState(state.products[0]?.id || 'PRD-1001');
-  const [purchaseQty, setPurchaseQty] = useState(24);
-  const [purchaseCost, setPurchaseCost] = useState(5.5);
+  const [purchaseByCarton, setPurchaseByCarton] = useState(true);
+  const [purchaseCartonsCount, setPurchaseCartonsCount] = useState(2);
+  const [purchasePiecesPerCarton, setPurchasePiecesPerCarton] = useState(24);
+  const [purchaseQty, setPurchaseQty] = useState(48);
+  const [purchaseCost, setPurchaseCost] = useState(8.0);
   const [purchasePaid, setPurchasePaid] = useState('');
   const [purchaseNotes, setPurchaseNotes] = useState('');
 
@@ -32,35 +49,100 @@ export default function InventoryView({
   const totalCostValue = state.products.reduce((s, p) => s + p.stock * p.costPrice, 0);
   const totalRetailValue = state.products.reduce((s, p) => s + p.stock * p.sellPrice, 0);
 
-  const openAddModal = () => {
+  const openAddModal = (presetType = 'general') => {
     const generatedBarcode = `622100${Math.floor(100000 + Math.random() * 900000)}`;
+    const isSnackOrCarton = presetType === 'carton';
+    const defPiecesPerCarton = isSnackOrCarton ? 24 : 12;
+    const defCartons = 5;
+    const defPieceSell = isSnackOrCarton ? 10 : 8;
+    const defPieceCost = isSnackOrCarton ? 8 : 5.5;
+    const defCartonSell = defPieceSell * defPiecesPerCarton - 15;
+
+    setEntryMode('carton');
+    setCartonsCountInput(defCartons);
+    setPiecesPerCartonInput(defPiecesPerCarton);
+    setExtraLoosePiecesInput(0);
+    setCartonCostInput(defPieceCost * defPiecesPerCarton);
+    setCartonSellPriceInput(defCartonSell);
+
     setEditingProduct({
       id: '',
       name: '',
       barcode: generatedBarcode,
       sku: `SKU-${Math.floor(100 + Math.random() * 900)}`,
-      category: 'CAT-1',
-      costPrice: 5,
-      sellPrice: 8,
-      wholesalePrice: 7,
-      stock: 50,
-      minStock: 10,
-      baseUnit: 'قطعة',
-      location: 'رف A-1',
+      category: isSnackOrCarton ? 'CAT-7' : 'CAT-1',
+      costPrice: defPieceCost,
+      sellPrice: defPieceSell,
+      wholesalePrice: defPieceSell - 1,
+      stock: defCartons * defPiecesPerCarton,
+      minStock: defPiecesPerCarton,
+      baseUnit: isSnackOrCarton ? 'كيس / قطعة' : 'قطعة',
+      piecesPerCarton: defPiecesPerCarton,
+      location: isSnackOrCarton ? 'ستاند الشيبسي والحلويات' : 'رف A-1',
       showOnline: true,
       featured: false,
-      image: 'https://images.unsplash.com/photo-1583485088034-697b5bc54ccd?auto=format&fit=crop&w=400&q=80',
+      image: isSnackOrCarton
+        ? 'https://images.unsplash.com/photo-1566478989037-eec170784d0b?auto=format&fit=crop&w=400&q=80'
+        : 'https://images.unsplash.com/photo-1583485088034-697b5bc54ccd?auto=format&fit=crop&w=400&q=80',
       units: [
-        { name: 'قطعة', factor: 1, price: 8, barcode: generatedBarcode },
-        { name: 'دستة (12 قطعة)', factor: 12, price: 85, barcode: `${generatedBarcode}2` }
+        { name: isSnackOrCarton ? 'كيس / قطعة' : 'قطعة', factor: 1, price: defPieceSell, barcode: generatedBarcode },
+        { name: `كرتونة (${defPiecesPerCarton} قطعة)`, factor: defPiecesPerCarton, price: defCartonSell, barcode: `${generatedBarcode}2` }
       ]
     });
     setModalOpen(true);
   };
 
   const openEditModal = (prod) => {
+    const ppc = Number(prod.piecesPerCarton) || (prod.units?.[1]?.factor) || 1;
+    setEntryMode(ppc > 1 ? 'carton' : 'piece');
+    setPiecesPerCartonInput(ppc);
+    setCartonsCountInput(ppc > 1 ? Math.floor((prod.stock || 0) / ppc) : (prod.stock || 0));
+    setExtraLoosePiecesInput(ppc > 1 ? (prod.stock || 0) % ppc : 0);
+    setCartonCostInput(Number(((prod.costPrice || 0) * ppc).toFixed(2)));
+    setCartonSellPriceInput(prod.units?.[1]?.price || Number(((prod.sellPrice || 0) * ppc).toFixed(2)));
     setEditingProduct(structuredClone(prod));
     setModalOpen(true);
+  };
+
+  // Sync carton calculator changes into editingProduct automatically
+  const recalcFromCartonInputs = (nextCartons, nextPpc, nextLoose, nextCartonCost, nextPieceSell, nextCartonSell) => {
+    const ppc = Math.max(1, Number(nextPpc) || 1);
+    const cartons = Math.max(0, Number(nextCartons) || 0);
+    const loose = Math.max(0, Number(nextLoose) || 0);
+    const totalPieces = cartons * ppc + loose;
+    const pieceCost = ppc > 0 ? Number((Number(nextCartonCost || 0) / ppc).toFixed(2)) : 0;
+    const pieceSell = Number(nextPieceSell || 0);
+    const cSell = Number(nextCartonSell || pieceSell * ppc);
+
+    setEditingProduct(prev => {
+      if (!prev) return prev;
+      const baseUnitName = prev.baseUnit || 'قطعة';
+      const existingUnits = [...(prev.units || [])];
+      existingUnits[0] = {
+        ...(existingUnits[0] || {}),
+        name: baseUnitName,
+        factor: 1,
+        price: pieceSell,
+        barcode: prev.barcode
+      };
+      if (ppc > 1) {
+        existingUnits[1] = {
+          ...(existingUnits[1] || {}),
+          name: `كرتونة / علبة (${ppc} ${baseUnitName})`,
+          factor: ppc,
+          price: cSell,
+          barcode: existingUnits[1]?.barcode || `${prev.barcode}2`
+        };
+      }
+      return {
+        ...prev,
+        piecesPerCarton: ppc,
+        stock: totalPieces,
+        costPrice: pieceCost,
+        sellPrice: pieceSell,
+        units: existingUnits
+      };
+    });
   };
 
   const handleAddUnitRow = () => {
@@ -69,7 +151,7 @@ export default function InventoryView({
       units: [
         ...(prev.units || []),
         {
-          name: 'دستة / علبة',
+          name: 'كرتونة / دستة',
           factor: 12,
           price: Number(prev.sellPrice) * 11,
           barcode: `${prev.barcode}${prev.units?.length + 1 || 2}`
@@ -101,13 +183,20 @@ export default function InventoryView({
 
   const handleSubmitPurchase = (e) => {
     e.preventDefault();
-    const total = Number(purchaseQty) * Number(purchaseCost);
+    const finalPiecesQty = purchaseByCarton
+      ? Number(purchaseCartonsCount) * Number(purchasePiecesPerCarton)
+      : Number(purchaseQty);
+    const total = finalPiecesQty * Number(purchaseCost);
     const paid = purchasePaid === '' ? total : Number(purchasePaid);
     onCreatePurchase({
       supplierId: purchaseSupplierId,
-      items: [{ productId: purchaseProductId, quantity: Number(purchaseQty), costPrice: Number(purchaseCost) }],
+      items: [{ productId: purchaseProductId, quantity: finalPiecesQty, costPrice: Number(purchaseCost) }],
       paidAmount: paid,
-      notes: purchaseNotes || `توريد مخزني (${purchaseQty} وحدة)`
+      notes:
+        purchaseNotes ||
+        (purchaseByCarton
+          ? `توريد ${purchaseCartonsCount} كرتونة × ${purchasePiecesPerCarton} قطعة = ${finalPiecesQty} قطعة`
+          : `توريد مخزني (${finalPiecesQty} قطعة)`)
     });
     setPurchaseModalOpen(false);
     setPurchaseNotes('');
@@ -127,6 +216,17 @@ export default function InventoryView({
     );
   });
 
+  // Helper to format stock into Cartons + Loose Pieces
+  const formatCartonBreakdown = (prod) => {
+    const ppc = Number(prod.piecesPerCarton) || (prod.units?.find(u => u.factor > 1)?.factor) || 1;
+    if (ppc <= 1) return null;
+    const cartons = Math.floor((prod.stock || 0) / ppc);
+    const loose = (prod.stock || 0) % ppc;
+    if (cartons > 0 && loose > 0) return `(${cartons} كرتونة و ${loose} ${prod.baseUnit})`;
+    if (cartons > 0) return `(${cartons} كرتونة كاملة • الكرتونة ${ppc} ${prod.baseUnit})`;
+    return `(أقل من كرتونة: ${loose} من ${ppc})`;
+  };
+
   return (
     <div className="space-y-5">
       {/* Top KPI Cards */}
@@ -135,7 +235,7 @@ export default function InventoryView({
           <div>
             <p className="text-xs font-bold text-slate-500">إجمالي الأصناف المسجلة</p>
             <h3 className="text-2xl font-black text-slate-900 mt-1">{state.products.length} صنف</h3>
-            <p className="text-[11px] text-emerald-600 font-semibold mt-0.5">يدعم تعدد الوحدات والباركود</p>
+            <p className="text-[11px] text-emerald-600 font-semibold mt-0.5">يدعم الإضافة بالكرتونة والبيع بالقطعة</p>
           </div>
           <div className="w-12 h-12 rounded-2xl bg-blue-50 text-blue-600 flex items-center justify-center">
             <Package className="w-6 h-6" />
@@ -198,7 +298,7 @@ export default function InventoryView({
               type="text"
               value={searchQuery}
               onChange={e => setSearchQuery(e.target.value)}
-              placeholder="ابحث بالاسم أو الباركود أو رقم الرف..."
+              placeholder="ابحث بالاسم (قلم، شيبسي، هدية، كتاب) أو الباركود أو رقم الرف..."
               className="w-full pr-10 pl-4 py-2.5 rounded-xl border border-slate-300 text-xs font-bold focus:border-emerald-600 outline-none"
             />
           </div>
@@ -207,34 +307,45 @@ export default function InventoryView({
             onChange={e => setSelectedCategory(e.target.value)}
             className="rounded-xl border border-slate-300 px-3 py-2.5 text-xs font-bold bg-white outline-none"
           >
-            <option value="ALL">جميع الأقسام</option>
+            <option value="ALL">جميع الأقسام ({state.categories.length})</option>
             {state.categories.map(c => (
               <option key={c.id} value={c.id}>{c.name}</option>
             ))}
           </select>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            onClick={() => setCatModalOpen(true)}
+            className="bg-purple-600 hover:bg-purple-700 text-white font-bold text-xs px-3.5 py-2.5 rounded-xl flex items-center gap-1.5 shadow-sm transition"
+          >
+            <Layers className="w-4 h-4" />
+            + إضافة / إدارة الأقسام ({state.categories.length})
+          </button>
           <button
             onClick={() => {
               const p = state.products[0];
               if (p) {
+                const ppc = Number(p.piecesPerCarton) || (p.units?.find(u => u.factor > 1)?.factor) || 24;
                 setPurchaseProductId(p.id);
                 setPurchaseCost(p.costPrice);
+                setPurchasePiecesPerCarton(ppc);
+                setPurchaseCartonsCount(2);
+                setPurchaseQty(2 * ppc);
               }
               setPurchaseModalOpen(true);
             }}
             className="bg-amber-500 hover:bg-amber-600 text-white font-bold text-xs px-4 py-2.5 rounded-xl flex items-center gap-1.5 shadow-sm transition"
           >
             <Truck className="w-4 h-4" />
-            توريد بضاعة (فاتورة مشتريات)
+            توريد بضاعة بالكرتونة / بالقطعة
           </button>
           <button
-            onClick={openAddModal}
-            className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs px-4 py-2.5 rounded-xl flex items-center gap-1.5 shadow-sm transition"
+            onClick={() => openAddModal('carton')}
+            className="bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs px-4 py-2.5 rounded-xl flex items-center gap-1.5 shadow-sm transition"
           >
-            <Plus className="w-4 h-4" />
-            إضافة صنف جديد
+            <Box className="w-4 h-4" />
+            + إضافة منتج جديد (بالكرتونة أو بالقطعة)
           </button>
         </div>
       </div>
@@ -247,10 +358,10 @@ export default function InventoryView({
               <tr>
                 <th className="py-3.5 px-4">الصنف / الباركود</th>
                 <th className="py-3.5 px-3">القسم / الرف</th>
-                <th className="py-3.5 px-3 text-center">الرصيد الحالي</th>
-                <th className="py-3.5 px-3 text-center">التكلفة</th>
-                <th className="py-3.5 px-3 text-center">قطاعي / جملة</th>
-                <th className="py-3.5 px-3">الوحدات المتعددة (قطعة / دستة / كرتونة)</th>
+                <th className="py-3.5 px-3 text-center">الرصيد بالقطعة وبالكرتونة</th>
+                <th className="py-3.5 px-3 text-center">تكلفة القطعة</th>
+                <th className="py-3.5 px-3 text-center">سعر بيع القطعة</th>
+                <th className="py-3.5 px-3">وحدات البيع (قطعة / كرتونة / دستة)</th>
                 <th className="py-3.5 px-3 text-center">المتجر</th>
                 <th className="py-3.5 px-4 text-left">إجراءات</th>
               </tr>
@@ -259,6 +370,7 @@ export default function InventoryView({
               {filteredProducts.map(prod => {
                 const catName = state.categories.find(c => c.id === prod.category)?.name || 'عام';
                 const isLow = prod.stock <= prod.minStock;
+                const cartonInfo = formatCartonBreakdown(prod);
                 return (
                   <tr key={prod.id} className="hover:bg-slate-50 transition">
                     <td className="py-3 px-4">
@@ -287,6 +399,9 @@ export default function InventoryView({
                         {isLow && <AlertTriangle className="w-3.5 h-3.5" />}
                         {prod.stock} {prod.baseUnit}
                       </span>
+                      {cartonInfo && (
+                        <div className="text-[11px] font-bold text-blue-700 mt-1">{cartonInfo}</div>
+                      )}
                       <div className="text-[10px] text-slate-400 mt-0.5">حد الطلب: {prod.minStock}</div>
                     </td>
                     <td className="py-3 px-3 text-center font-bold text-slate-600">
@@ -354,7 +469,7 @@ export default function InventoryView({
         </div>
       </div>
 
-      {/* Add / Edit Product Modal with Multi-Unit Builder */}
+      {/* Add / Edit Product Modal with Smart Carton-to-Piece Calculator */}
       {modalOpen && editingProduct && (
         <div className="fixed inset-0 z-50 bg-slate-900/70 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
           <form
@@ -364,7 +479,7 @@ export default function InventoryView({
             <div className="flex items-center justify-between border-b border-slate-200 pb-3">
               <h3 className="font-black text-base text-slate-900 flex items-center gap-2">
                 <Layers className="w-5 h-5 text-emerald-600" />
-                {editingProduct.id ? 'تعديل بيانات الصنف والوحدات' : 'إضافة صنف جديد للمخزن'}
+                {editingProduct.id ? 'تعديل بيانات الصنف والكراتين' : 'إضافة منتج جديد للمكتبة (أدوات / شيبسي / هدايا / كتب)'}
               </h3>
               <button
                 type="button"
@@ -383,24 +498,252 @@ export default function InventoryView({
                   required
                   value={editingProduct.name}
                   onChange={e => setEditingProduct({ ...editingProduct, name: e.target.value })}
-                  placeholder="مثال: قلم جاف روتو سائل أزرق"
+                  placeholder="مثال: شيبسي عائلي بالجبنة / قلم روتو / بوكس هدايا / كشكول سلك..."
                   className="w-full rounded-xl border border-slate-300 px-3 py-2 font-bold"
                 />
               </div>
 
               <div>
-                <label className="block font-bold text-slate-700 mb-1">القسم</label>
-                <select
-                  value={editingProduct.category}
-                  onChange={e => setEditingProduct({ ...editingProduct, category: e.target.value })}
-                  className="w-full rounded-xl border border-slate-300 px-3 py-2 font-bold bg-white"
-                >
-                  {state.categories.map(c => (
-                    <option key={c.id} value={c.id}>{c.name}</option>
-                  ))}
-                </select>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="font-bold text-slate-700">القسم (أدوات / شيبسي / هدايا / ألعاب)</label>
+                  <button
+                    type="button"
+                    onClick={() => setShowInlineCat(!showInlineCat)}
+                    className="text-[11px] font-black text-purple-700 hover:underline"
+                  >
+                    {showInlineCat ? 'إلغاء' : '+ قسم جديد سريع'}
+                  </button>
+                </div>
+                {showInlineCat ? (
+                  <div className="flex gap-1.5">
+                    <input
+                      type="text"
+                      value={inlineNewCatName}
+                      onChange={e => setInlineNewCatName(e.target.value)}
+                      placeholder="اسم القسم الجديد (مثال: مشروبات باردة)..."
+                      className="flex-1 rounded-xl border-2 border-purple-400 px-3 py-1.5 font-bold"
+                    />
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        if (!inlineNewCatName.trim()) return;
+                        const newId = `CAT-${Date.now().toString().slice(-4)}`;
+                        if (onSaveCategory) {
+                          await onSaveCategory({ id: newId, name: inlineNewCatName.trim() });
+                        }
+                        setEditingProduct({ ...editingProduct, category: newId });
+                        setInlineNewCatName('');
+                        setShowInlineCat(false);
+                      }}
+                      className="bg-purple-600 text-white font-black px-3 py-1.5 rounded-xl"
+                    >
+                      حفظ
+                    </button>
+                  </div>
+                ) : (
+                  <select
+                    value={editingProduct.category}
+                    onChange={e => setEditingProduct({ ...editingProduct, category: e.target.value })}
+                    className="w-full rounded-xl border border-slate-300 px-3 py-2 font-bold bg-white"
+                  >
+                    {state.categories.map(c => (
+                      <option key={c.id} value={c.id}>{c.name}</option>
+                    ))}
+                  </select>
+                )}
               </div>
 
+              <div>
+                <label className="block font-bold text-slate-700 mb-1">اسم الوحدة الفردية (قطعة / كيس / علبة / كتاب)</label>
+                <input
+                  type="text"
+                  value={editingProduct.baseUnit}
+                  onChange={e => setEditingProduct({ ...editingProduct, baseUnit: e.target.value })}
+                  placeholder="قطعة / كيس"
+                  className="w-full rounded-xl border border-slate-300 px-3 py-2 font-bold"
+                />
+              </div>
+            </div>
+
+            {/* SMART CARTON & PIECE CALCULATOR BOX */}
+            <div className="bg-emerald-50/70 p-4 rounded-2xl border-2 border-emerald-200 space-y-3 text-xs">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div>
+                  <h4 className="font-black text-sm text-emerald-950 flex items-center gap-1.5">
+                    <Box className="w-4 h-4 text-emerald-600" />
+                    طريقة إدخال الكمية والتسعير (بالكرتونة أم بالقطعة؟)
+                  </h4>
+                  <p className="text-[11px] text-emerald-800">
+                    لو الصنف بيجي بالكرتونة (زي الشيبسي، المولتو، الأقلام، الكشاكيل)، اكتب عدد الكراتين وعدد القطع داخل الكرتونة وهيحسب الرصيد الفردي تلقائياً!
+                  </p>
+                </div>
+                <div className="flex bg-white rounded-xl p-1 border border-emerald-200">
+                  <button
+                    type="button"
+                    onClick={() => setEntryMode('carton')}
+                    className={`px-3 py-1.5 rounded-lg font-black text-xs transition ${
+                      entryMode === 'carton' ? 'bg-emerald-600 text-white shadow' : 'text-slate-600'
+                    }`}
+                  >
+                    📦 إدخال بالكرتونة / العلبة
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setEntryMode('piece')}
+                    className={`px-3 py-1.5 rounded-lg font-black text-xs transition ${
+                      entryMode === 'piece' ? 'bg-slate-900 text-white shadow' : 'text-slate-600'
+                    }`}
+                  >
+                    🔢 إدخال بالقطعة الفردية
+                  </button>
+                </div>
+              </div>
+
+              {entryMode === 'carton' ? (
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-1">
+                  <div className="bg-white p-2.5 rounded-xl border border-emerald-200">
+                    <label className="block font-black text-emerald-900 mb-1">عدد الكراتين المضافة</label>
+                    <input
+                      type="number"
+                      min="0"
+                      value={cartonsCountInput}
+                      onChange={e => {
+                        const v = e.target.value;
+                        setCartonsCountInput(v);
+                        recalcFromCartonInputs(v, piecesPerCartonInput, extraLoosePiecesInput, cartonCostInput, editingProduct.sellPrice, cartonSellPriceInput);
+                      }}
+                      className="w-full rounded-lg border border-slate-300 px-2.5 py-1.5 font-black text-sm text-emerald-700"
+                    />
+                  </div>
+                  <div className="bg-white p-2.5 rounded-xl border border-emerald-200">
+                    <label className="block font-black text-emerald-900 mb-1">عدد القطع داخل الكرتونة الواحدة</label>
+                    <input
+                      type="number"
+                      min="1"
+                      value={piecesPerCartonInput}
+                      onChange={e => {
+                        const v = e.target.value;
+                        setPiecesPerCartonInput(v);
+                        recalcFromCartonInputs(cartonsCountInput, v, extraLoosePiecesInput, cartonCostInput, editingProduct.sellPrice, cartonSellPriceInput);
+                      }}
+                      className="w-full rounded-lg border border-slate-300 px-2.5 py-1.5 font-black text-sm text-blue-700"
+                    />
+                  </div>
+                  <div className="bg-white p-2.5 rounded-xl border border-emerald-200">
+                    <label className="block font-bold text-slate-700 mb-1">+ قطع فرط إضافية (اختياري)</label>
+                    <input
+                      type="number"
+                      min="0"
+                      value={extraLoosePiecesInput}
+                      onChange={e => {
+                        const v = e.target.value;
+                        setExtraLoosePiecesInput(v);
+                        recalcFromCartonInputs(cartonsCountInput, piecesPerCartonInput, v, cartonCostInput, editingProduct.sellPrice, cartonSellPriceInput);
+                      }}
+                      className="w-full rounded-lg border border-slate-300 px-2.5 py-1.5 font-bold text-sm"
+                    />
+                  </div>
+
+                  <div className="bg-white p-2.5 rounded-xl border border-emerald-200">
+                    <label className="block font-bold text-slate-700 mb-1">سعر شراء الكرتونة جملة (التكلفة)</label>
+                    <input
+                      type="number"
+                      step="0.25"
+                      value={cartonCostInput}
+                      onChange={e => {
+                        const v = e.target.value;
+                        setCartonCostInput(v);
+                        recalcFromCartonInputs(cartonsCountInput, piecesPerCartonInput, extraLoosePiecesInput, v, editingProduct.sellPrice, cartonSellPriceInput);
+                      }}
+                      className="w-full rounded-lg border border-slate-300 px-2.5 py-1.5 font-bold text-sm"
+                    />
+                    <span className="text-[10px] text-slate-500 mt-1 block">
+                      تكلفة الـ {editingProduct.baseUnit} الواحد = <strong>{editingProduct.costPrice} ج.م</strong>
+                    </span>
+                  </div>
+
+                  <div className="bg-white p-2.5 rounded-xl border border-emerald-200">
+                    <label className="block font-black text-emerald-800 mb-1">سعر بيع القطعة / الكيس للعميل</label>
+                    <input
+                      type="number"
+                      step="0.25"
+                      value={editingProduct.sellPrice}
+                      onChange={e => {
+                        const v = e.target.value;
+                        recalcFromCartonInputs(cartonsCountInput, piecesPerCartonInput, extraLoosePiecesInput, cartonCostInput, v, cartonSellPriceInput);
+                      }}
+                      className="w-full rounded-lg border border-emerald-400 px-2.5 py-1.5 font-black text-sm text-emerald-700"
+                    />
+                    <span className="text-[10px] text-emerald-700 font-bold mt-1 block">
+                      ربح القطعة: +{(Number(editingProduct.sellPrice) - Number(editingProduct.costPrice)).toFixed(2)} ج
+                    </span>
+                  </div>
+
+                  <div className="bg-white p-2.5 rounded-xl border border-emerald-200">
+                    <label className="block font-bold text-slate-700 mb-1">سعر بيع الكرتونة كاملة</label>
+                    <input
+                      type="number"
+                      step="0.5"
+                      value={cartonSellPriceInput}
+                      onChange={e => {
+                        const v = e.target.value;
+                        setCartonSellPriceInput(v);
+                        recalcFromCartonInputs(cartonsCountInput, piecesPerCartonInput, extraLoosePiecesInput, cartonCostInput, editingProduct.sellPrice, v);
+                      }}
+                      className="w-full rounded-lg border border-slate-300 px-2.5 py-1.5 font-bold text-sm text-amber-700"
+                    />
+                  </div>
+
+                  <div className="sm:col-span-3 bg-slate-900 text-white p-3 rounded-xl flex flex-wrap items-center justify-between gap-2">
+                    <span>
+                      إجمالي الرصيد الذي سيُضاف للمخزن (ويُخصم منه تلقائياً عند كل بيعة):
+                    </span>
+                    <span className="text-base font-black text-emerald-400">
+                      {editingProduct.stock} {editingProduct.baseUnit} ({cartonsCountInput} كرتونة × {piecesPerCartonInput})
+                    </span>
+                  </div>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-1">
+                  <div className="bg-white p-2.5 rounded-xl border border-slate-200">
+                    <label className="block font-bold text-slate-700 mb-1">الكمية بالمخزن (بالقطعة)</label>
+                    <input
+                      type="number"
+                      value={editingProduct.stock}
+                      onChange={e => setEditingProduct({ ...editingProduct, stock: Number(e.target.value) })}
+                      className="w-full rounded-lg border border-slate-300 px-2.5 py-1.5 font-black text-sm"
+                    />
+                  </div>
+                  <div className="bg-white p-2.5 rounded-xl border border-slate-200">
+                    <label className="block font-bold text-slate-700 mb-1">سعر تكلفة القطعة</label>
+                    <input
+                      type="number"
+                      step="0.25"
+                      value={editingProduct.costPrice}
+                      onChange={e => setEditingProduct({ ...editingProduct, costPrice: Number(e.target.value) })}
+                      className="w-full rounded-lg border border-slate-300 px-2.5 py-1.5 font-bold text-sm"
+                    />
+                  </div>
+                  <div className="bg-white p-2.5 rounded-xl border border-slate-200">
+                    <label className="block font-black text-emerald-800 mb-1">سعر بيع القطعة</label>
+                    <input
+                      type="number"
+                      step="0.25"
+                      value={editingProduct.sellPrice}
+                      onChange={e => {
+                        const val = Number(e.target.value);
+                        const updatedUnits = [...(editingProduct.units || [])];
+                        if (updatedUnits[0]) updatedUnits[0].price = val;
+                        setEditingProduct({ ...editingProduct, sellPrice: val, units: updatedUnits });
+                      }}
+                      className="w-full rounded-lg border border-emerald-400 px-2.5 py-1.5 font-black text-sm text-emerald-700"
+                    />
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
               <div>
                 <label className="block font-bold text-slate-700 mb-1">الباركود الرئيسي</label>
                 <input
@@ -412,75 +755,32 @@ export default function InventoryView({
               </div>
 
               <div>
-                <label className="block font-bold text-slate-700 mb-1">سعر التكلفة (للقطعة الأساسية)</label>
-                <input
-                  type="number"
-                  step="0.25"
-                  value={editingProduct.costPrice}
-                  onChange={e => setEditingProduct({ ...editingProduct, costPrice: e.target.value })}
-                  className="w-full rounded-xl border border-slate-300 px-3 py-2 font-bold"
-                />
-              </div>
-
-              <div>
-                <label className="block font-bold text-slate-700 mb-1">سعر البيع القطاعي</label>
-                <input
-                  type="number"
-                  step="0.25"
-                  value={editingProduct.sellPrice}
-                  onChange={e => setEditingProduct({ ...editingProduct, sellPrice: e.target.value })}
-                  className="w-full rounded-xl border border-slate-300 px-3 py-2 font-bold text-emerald-700"
-                />
-              </div>
-
-              <div>
-                <label className="block font-bold text-slate-700 mb-1">سعر الجملة (للمدرسين والكميات)</label>
-                <input
-                  type="number"
-                  step="0.25"
-                  value={editingProduct.wholesalePrice}
-                  onChange={e => setEditingProduct({ ...editingProduct, wholesalePrice: e.target.value })}
-                  className="w-full rounded-xl border border-slate-300 px-3 py-2 font-bold text-amber-700"
-                />
-              </div>
-
-              <div>
-                <label className="block font-bold text-slate-700 mb-1">اسم الوحدة الأساسية (قطعة / كتاب / رزمة)</label>
-                <input
-                  type="text"
-                  value={editingProduct.baseUnit}
-                  onChange={e => setEditingProduct({ ...editingProduct, baseUnit: e.target.value })}
-                  className="w-full rounded-xl border border-slate-300 px-3 py-2 font-bold"
-                />
-              </div>
-
-              <div>
-                <label className="block font-bold text-slate-700 mb-1">الرصيد الحالي بالمخزن (بالوحدة الأساسية)</label>
-                <input
-                  type="number"
-                  value={editingProduct.stock}
-                  onChange={e => setEditingProduct({ ...editingProduct, stock: e.target.value })}
-                  className="w-full rounded-xl border border-slate-300 px-3 py-2 font-bold"
-                />
-              </div>
-
-              <div>
                 <label className="block font-bold text-slate-700 mb-1">حد التنبيه بالنواقص (Min Stock)</label>
                 <input
                   type="number"
                   value={editingProduct.minStock}
-                  onChange={e => setEditingProduct({ ...editingProduct, minStock: e.target.value })}
+                  onChange={e => setEditingProduct({ ...editingProduct, minStock: Number(e.target.value) })}
                   className="w-full rounded-xl border border-slate-300 px-3 py-2 font-bold"
                 />
               </div>
 
               <div>
-                <label className="block font-bold text-slate-700 mb-1">مكان الرف / المخزن</label>
+                <label className="block font-bold text-slate-700 mb-1">مكان الرف / الاستاند</label>
                 <input
                   type="text"
                   value={editingProduct.location}
                   onChange={e => setEditingProduct({ ...editingProduct, location: e.target.value })}
                   className="w-full rounded-xl border border-slate-300 px-3 py-2 font-bold"
+                />
+              </div>
+
+              <div className="sm:col-span-2">
+                <label className="block font-bold text-slate-700 mb-1">رابط صورة المنتج (أو اتركه للصورة الافتراضية)</label>
+                <input
+                  type="text"
+                  value={editingProduct.image}
+                  onChange={e => setEditingProduct({ ...editingProduct, image: e.target.value })}
+                  className="w-full rounded-xl border border-slate-300 px-3 py-2 font-mono text-[11px]"
                 />
               </div>
 
@@ -492,7 +792,7 @@ export default function InventoryView({
                     onChange={e => setEditingProduct({ ...editingProduct, showOnline: e.target.checked })}
                     className="w-4 h-4 accent-emerald-600"
                   />
-                  عرض الصنف في المتجر الإلكتروني للعملاء
+                  عرض في المتجر الإلكتروني
                 </label>
               </div>
             </div>
@@ -501,8 +801,8 @@ export default function InventoryView({
             <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200 space-y-2.5">
               <div className="flex items-center justify-between">
                 <div>
-                  <h4 className="font-black text-xs text-slate-900">تعدد الوحدات (قطعة / دستة / باكتة / كرتونة)</h4>
-                  <p className="text-[11px] text-slate-500">يتم خصم عدد القطع تلقائياً من الرصيد الأساسي عند البيع بأي وحدة</p>
+                  <h4 className="font-black text-xs text-slate-900">وحدات البيع في الكاشير (قطعة / دستة / كرتونة)</h4>
+                  <p className="text-[11px] text-slate-500">عند بيع كيس يخصم 1 من المخزن، وعند بيع كرتونة يخصم عدد قطع الكرتونة تلقائياً</p>
                 </div>
                 <button
                   type="button"
@@ -510,7 +810,7 @@ export default function InventoryView({
                   className="bg-slate-900 text-white text-xs font-bold px-3 py-1.5 rounded-xl flex items-center gap-1"
                 >
                   <Plus className="w-3.5 h-3.5" />
-                  إضافة وحدة كبرى
+                  إضافة وحدة بيع أخرى
                 </button>
               </div>
 
@@ -527,7 +827,7 @@ export default function InventoryView({
                       />
                     </div>
                     <div className="col-span-2">
-                      <label className="text-[10px] text-slate-400 block">تحتوي على كم قطعة؟</label>
+                      <label className="text-[10px] text-slate-400 block">تخصم كم قطعة؟</label>
                       <input
                         type="number"
                         min="1"
@@ -576,7 +876,7 @@ export default function InventoryView({
                 type="submit"
                 className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white font-black py-3 rounded-xl shadow"
               >
-                حفظ بيانات الصنف والوحدات
+                حفظ الصنف في المخزن والكاشير والمتجر
               </button>
               <button
                 type="button"
@@ -590,7 +890,7 @@ export default function InventoryView({
         </div>
       )}
 
-      {/* Purchase / Supplier Restock Modal */}
+      {/* Purchase / Supplier Restock Modal (Supports Restocking by Carton or Piece) */}
       {purchaseModalOpen && (
         <div className="fixed inset-0 z-50 bg-slate-900/70 backdrop-blur-sm flex items-center justify-center p-4">
           <form
@@ -599,7 +899,7 @@ export default function InventoryView({
           >
             <h3 className="font-black text-base text-slate-900 flex items-center gap-2">
               <Truck className="w-5 h-5 text-amber-500" />
-              توريد بضاعة للمخزن (فاتورة مشتريات)
+              توريد بضاعة للمخزن (بالكرتونة أو بالقطعة)
             </h3>
 
             <div>
@@ -623,19 +923,72 @@ export default function InventoryView({
                   const pid = e.target.value;
                   setPurchaseProductId(pid);
                   const found = state.products.find(p => p.id === pid);
-                  if (found) setPurchaseCost(found.costPrice);
+                  if (found) {
+                    const ppc = Number(found.piecesPerCarton) || (found.units?.find(u => u.factor > 1)?.factor) || 24;
+                    setPurchaseCost(found.costPrice);
+                    setPurchasePiecesPerCarton(ppc);
+                  }
                 }}
                 className="w-full rounded-xl border border-slate-300 px-3 py-2 font-bold bg-white"
               >
                 {state.products.map(p => (
-                  <option key={p.id} value={p.id}>{p.name} (الرصيد الحالي: {p.stock})</option>
+                  <option key={p.id} value={p.id}>{p.name} (الرصيد الحالي: {p.stock} {p.baseUnit})</option>
                 ))}
               </select>
             </div>
 
-            <div className="grid grid-cols-2 gap-3">
+            <div className="flex bg-slate-100 p-1 rounded-xl">
+              <button
+                type="button"
+                onClick={() => setPurchaseByCarton(true)}
+                className={`flex-1 py-1.5 rounded-lg font-black transition ${
+                  purchaseByCarton ? 'bg-amber-500 text-white shadow' : 'text-slate-600'
+                }`}
+              >
+                📦 توريد بالكرتونة
+              </button>
+              <button
+                type="button"
+                onClick={() => setPurchaseByCarton(false)}
+                className={`flex-1 py-1.5 rounded-lg font-black transition ${
+                  !purchaseByCarton ? 'bg-slate-900 text-white shadow' : 'text-slate-600'
+                }`}
+              >
+                🔢 توريد بالقطعة
+              </button>
+            </div>
+
+            {purchaseByCarton ? (
+              <div className="grid grid-cols-2 gap-3 bg-amber-50/60 p-3 rounded-xl border border-amber-200">
+                <div>
+                  <label className="block font-black text-amber-900 mb-1">عدد الكراتين الواردة</label>
+                  <input
+                    type="number"
+                    min="1"
+                    required
+                    value={purchaseCartonsCount}
+                    onChange={e => setPurchaseCartonsCount(e.target.value)}
+                    className="w-full rounded-xl border border-slate-300 px-3 py-2 font-black bg-white"
+                  />
+                </div>
+                <div>
+                  <label className="block font-black text-amber-900 mb-1">عدد القطع في الكرتونة</label>
+                  <input
+                    type="number"
+                    min="1"
+                    required
+                    value={purchasePiecesPerCarton}
+                    onChange={e => setPurchasePiecesPerCarton(e.target.value)}
+                    className="w-full rounded-xl border border-slate-300 px-3 py-2 font-black bg-white"
+                  />
+                </div>
+                <div className="col-span-2 text-amber-900 font-bold">
+                  سيتم إضافة: <strong>{Number(purchaseCartonsCount) * Number(purchasePiecesPerCarton)} قطعة</strong> لرصيد المخزن
+                </div>
+              </div>
+            ) : (
               <div>
-                <label className="block font-bold text-slate-700 mb-1">الكمية الواردة (بالوحدة الأساسية)</label>
+                <label className="block font-bold text-slate-700 mb-1">الكمية الواردة (بالقطعة)</label>
                 <input
                   type="number"
                   min="1"
@@ -645,34 +998,45 @@ export default function InventoryView({
                   className="w-full rounded-xl border border-slate-300 px-3 py-2 font-bold"
                 />
               </div>
-              <div>
-                <label className="block font-bold text-slate-700 mb-1">سعر شراء الوحدة (التكلفة)</label>
-                <input
-                  type="number"
-                  step="0.25"
-                  required
-                  value={purchaseCost}
-                  onChange={e => setPurchaseCost(e.target.value)}
-                  className="w-full rounded-xl border border-slate-300 px-3 py-2 font-bold"
-                />
-              </div>
-            </div>
-
-            <div className="bg-amber-50 p-3 rounded-xl border border-amber-200 flex justify-between items-center font-bold text-amber-900">
-              <span>إجمالي فاتورة المشتريات:</span>
-              <span className="text-base font-black">{(Number(purchaseQty) * Number(purchaseCost)).toFixed(2)} ج.م</span>
-            </div>
+            )}
 
             <div>
-              <label className="block font-bold text-slate-700 mb-1">المبلغ المدفوع للمورد الآن (اتركه فارغاً لو مدفوع بالكامل)</label>
+              <label className="block font-bold text-slate-700 mb-1">سعر شراء القطعة الواحدة (التكلفة)</label>
               <input
                 type="number"
-                placeholder={`${(Number(purchaseQty) * Number(purchaseCost)).toFixed(2)}`}
-                value={purchasePaid}
-                onChange={e => setPurchasePaid(e.target.value)}
+                step="0.25"
+                required
+                value={purchaseCost}
+                onChange={e => setPurchaseCost(e.target.value)}
                 className="w-full rounded-xl border border-slate-300 px-3 py-2 font-bold"
               />
             </div>
+
+            {(() => {
+              const effQty = purchaseByCarton
+                ? Number(purchaseCartonsCount) * Number(purchasePiecesPerCarton)
+                : Number(purchaseQty);
+              const totalPurchase = effQty * Number(purchaseCost);
+              return (
+                <>
+                  <div className="bg-amber-50 p-3 rounded-xl border border-amber-200 flex justify-between items-center font-bold text-amber-900">
+                    <span>إجمالي فاتورة المشتريات ({effQty} قطعة):</span>
+                    <span className="text-base font-black">{totalPurchase.toFixed(2)} ج.م</span>
+                  </div>
+
+                  <div>
+                    <label className="block font-bold text-slate-700 mb-1">المبلغ المدفوع للمورد الآن (اتركه فارغاً لو مدفوع بالكامل)</label>
+                    <input
+                      type="number"
+                      placeholder={`${totalPurchase.toFixed(2)}`}
+                      value={purchasePaid}
+                      onChange={e => setPurchasePaid(e.target.value)}
+                      className="w-full rounded-xl border border-slate-300 px-3 py-2 font-bold"
+                    />
+                  </div>
+                </>
+              );
+            })()}
 
             <div>
               <label className="block font-bold text-slate-700 mb-1">ملاحظات الفاتورة</label>
@@ -680,7 +1044,7 @@ export default function InventoryView({
                 type="text"
                 value={purchaseNotes}
                 onChange={e => setPurchaseNotes(e.target.value)}
-                placeholder="مثال: دفعة بضاعة مدارس جديدة"
+                placeholder="مثال: توريد كراتين شيبسي وبضاعة جديدة"
                 className="w-full rounded-xl border border-slate-300 px-3 py-2 font-bold"
               />
             </div>
@@ -701,6 +1065,77 @@ export default function InventoryView({
               </button>
             </div>
           </form>
+        </div>
+      )}
+
+      {/* Categories Management Modal */}
+      {catModalOpen && (
+        <div className="fixed inset-0 z-50 bg-slate-900/70 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full p-5 border border-slate-200 space-y-4 text-xs">
+            <div className="flex items-center justify-between border-b border-slate-200 pb-3">
+              <h3 className="font-black text-base text-slate-900 flex items-center gap-2">
+                <Layers className="w-5 h-5 text-purple-600" />
+                إدارة وإضافة أقسام المكتبة والسوبر ماركت
+              </h3>
+              <button
+                type="button"
+                onClick={() => setCatModalOpen(false)}
+                className="text-slate-500 font-bold"
+              >
+                إغلاق ✕
+              </button>
+            </div>
+
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                if (!newCatName.trim()) return;
+                onSaveCategory?.({ name: newCatName.trim() });
+                setNewCatName('');
+              }}
+              className="flex gap-2"
+            >
+              <input
+                type="text"
+                required
+                value={newCatName}
+                onChange={e => setNewCatName(e.target.value)}
+                placeholder="اسم القسم الجديد (مثال: مشروبات، عطور، شيكولاتة، خردوات)..."
+                className="flex-1 rounded-xl border-2 border-purple-300 focus:border-purple-600 px-3 py-2 font-bold outline-none"
+              />
+              <button
+                type="submit"
+                className="bg-purple-600 hover:bg-purple-700 text-white font-black px-4 py-2 rounded-xl flex items-center gap-1"
+              >
+                <Plus className="w-4 h-4" />
+                إضافة قسم
+              </button>
+            </form>
+
+            <div className="divide-y divide-slate-100 max-h-64 overflow-y-auto border border-slate-200 rounded-xl">
+              {state.categories.map(cat => {
+                const count = state.products.filter(p => p.category === cat.id).length;
+                return (
+                  <div key={cat.id} className="p-3 flex items-center justify-between hover:bg-slate-50">
+                    <div>
+                      <span className="font-black text-slate-900 text-sm">{cat.name}</span>
+                      <span className="text-[11px] text-slate-400 mr-2">({count} صنف)</span>
+                    </div>
+                    {count === 0 && (
+                      <button
+                        type="button"
+                        onClick={() => onDeleteCategory?.(cat.id)}
+                        className="text-rose-500 hover:text-rose-700 p-1 rounded-lg hover:bg-rose-50"
+                        title="حذف القسم"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
         </div>
       )}
     </div>

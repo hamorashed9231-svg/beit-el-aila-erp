@@ -49,7 +49,9 @@ export const initialDatabase = {
     { id: "CAT-3", name: "كتب خارجية ودراسية", icon: "GraduationCap", color: "purple" },
     { id: "CAT-4", name: "أدوات هندسية وفنية", icon: "Compass", color: "amber" },
     { id: "CAT-5", name: "ملفات وحافظات وورق تصوير", icon: "Folder", color: "cyan" },
-    { id: "CAT-6", name: "هدايا وألعاب وشنط مدرسية", icon: "Gift", color: "rose" }
+    { id: "CAT-6", name: "هدايا وشنط مدرسية", icon: "Gift", color: "rose" },
+    { id: "CAT-7", name: "شيبسي وسناكس وحلويات ومشروبات", icon: "Coffee", color: "orange" },
+    { id: "CAT-8", name: "ألعاب أطفال وإكسسوارات وخردوات", icon: "Gamepad2", color: "indigo" }
   ],
 
   products: [
@@ -314,12 +316,101 @@ export const initialDatabase = {
       stock: 14,
       minStock: 5,
       baseUnit: "قطعة",
+      piecesPerCarton: 1,
       location: "قسم الشنط والهدايا",
       showOnline: true,
       featured: true,
       image: "https://images.unsplash.com/photo-1553062407-98eeb64c6a62?auto=format&fit=crop&w=400&q=80",
       units: [
         { name: "قطعة", factor: 1, price: 480.0, barcode: "622100600101" }
+      ]
+    },
+    {
+      id: "PRD-1014",
+      barcode: "622100700101",
+      sku: "SNK-CHIPSY-LG",
+      name: "شيبسي عائلي كبير (جبنة متبلة / شطة وليمون / طماطم)",
+      category: "CAT-7",
+      costPrice: 8.25,
+      sellPrice: 10.0,
+      wholesalePrice: 9.0,
+      stock: 120,
+      minStock: 24,
+      baseUnit: "كيس",
+      piecesPerCarton: 24,
+      location: "ستاند الشيبسي والسناكس",
+      showOnline: true,
+      featured: true,
+      image: "https://images.unsplash.com/photo-1566478989037-eec170784d0b?auto=format&fit=crop&w=400&q=80",
+      units: [
+        { name: "كيس", factor: 1, price: 10.0, barcode: "622100700101" },
+        { name: "كرتونة (24 كيس)", factor: 24, price: 225.0, barcode: "622100700102" }
+      ]
+    },
+    {
+      id: "PRD-1015",
+      barcode: "622100700201",
+      sku: "SNK-MOLTO-XXL",
+      name: "مولتو ماجنم شوكولاتة وبندق (Molto Magnum)",
+      category: "CAT-7",
+      costPrice: 12.0,
+      sellPrice: 15.0,
+      wholesalePrice: 13.5,
+      stock: 72,
+      minStock: 24,
+      baseUnit: "قطعة",
+      piecesPerCarton: 24,
+      location: "ستاند الحلويات والمولتو",
+      showOnline: true,
+      featured: true,
+      image: "https://images.unsplash.com/photo-1558961363-fa8fdf82db35?auto=format&fit=crop&w=400&q=80",
+      units: [
+        { name: "قطعة", factor: 1, price: 15.0, barcode: "622100700201" },
+        { name: "علبة / كرتونة (24 قطعة)", factor: 24, price: 330.0, barcode: "622100700202" }
+      ]
+    },
+    {
+      id: "PRD-1016",
+      barcode: "622100600201",
+      sku: "GFT-BOX-LUX",
+      name: "بوكس هدايا قطيفة فاخر للساعات والإكسسوارات والبرفانات",
+      category: "CAT-6",
+      costPrice: 32.0,
+      sellPrice: 50.0,
+      wholesalePrice: 40.0,
+      stock: 36,
+      minStock: 6,
+      baseUnit: "قطعة",
+      piecesPerCarton: 12,
+      location: "فاترينة الهدايا - 2",
+      showOnline: true,
+      featured: true,
+      image: "https://images.unsplash.com/photo-1549465220-1a8b9238cd48?auto=format&fit=crop&w=400&q=80",
+      units: [
+        { name: "قطعة", factor: 1, price: 50.0, barcode: "622100600201" },
+        { name: "دستة (12 بوكس)", factor: 12, price: 500.0, barcode: "622100600202" }
+      ]
+    },
+    {
+      id: "PRD-1017",
+      barcode: "622100800101",
+      sku: "TOY-RUBIK-3X3",
+      name: "مكعب روبيك ذكي سريع (Rubik's Cube) وألعاب ذكاء",
+      category: "CAT-8",
+      costPrice: 45.0,
+      sellPrice: 70.0,
+      wholesalePrice: 55.0,
+      stock: 24,
+      minStock: 6,
+      baseUnit: "قطعة",
+      piecesPerCarton: 12,
+      location: "قسم الألعاب والهدايا",
+      showOnline: true,
+      featured: false,
+      image: "https://images.unsplash.com/photo-1591991731833-b4807cf7ef94?auto=format&fit=crop&w=400&q=80",
+      units: [
+        { name: "قطعة", factor: 1, price: 70.0, barcode: "622100800101" },
+        { name: "كرتونة (12 قطعة)", factor: 12, price: 720.0, barcode: "622100800102" }
       ]
     }
   ],
