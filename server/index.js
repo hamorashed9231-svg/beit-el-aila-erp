@@ -53,6 +53,21 @@ function normalizeServerDB(parsed) {
   return parsed;
 }
 
+function generateNextId(prefix, list = [], startAt = 1000) {
+  let maxNum = startAt;
+  if (Array.isArray(list)) {
+    list.forEach(item => {
+      if (item && typeof item.id === 'string' && item.id.startsWith(`${prefix}-`)) {
+        const numPart = parseInt(item.id.slice(prefix.length + 1), 10);
+        if (!Number.isNaN(numPart) && numPart > maxNum) {
+          maxNum = numPart;
+        }
+      }
+    });
+  }
+  return `${prefix}-${maxNum + 1}`;
+}
+
 function loadDB() {
   try {
     if (fs.existsSync(DB_FILE)) {
@@ -71,6 +86,7 @@ let db = loadDB();
 
 async function pushToFirebaseCloud() {
   try {
+    if (!db._updatedAt) db._updatedAt = Date.now();
     const res = await fetch(FIREBASE_DB_URL, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
@@ -91,22 +107,30 @@ async function pullFromFirebaseCloud() {
     if (res.ok) {
       const cloudData = await res.json();
       if (cloudData && (cloudData.settings || cloudData._initialized || cloudData.products)) {
-        // Merge new online orders & online print jobs submitted by customers on https://beit-el-aila-erp.web.app/store
-        if (Array.isArray(cloudData.onlineOrders)) {
-          cloudData.onlineOrders.forEach(co => {
-            const existing = db.onlineOrders.find(lo => lo.id === co.id);
-            if (!existing) {
-              db.onlineOrders.unshift(co);
-            }
-          });
-        }
-        if (Array.isArray(cloudData.printJobs)) {
-          cloudData.printJobs.forEach(cp => {
-            const existing = db.printJobs.find(lp => lp.id === cp.id);
-            if (!existing) {
-              db.printJobs.unshift(cp);
-            }
-          });
+        const cloudNormalized = normalizeServerDB(cloudData);
+        const cloudTime = Number(cloudNormalized._updatedAt) || 0;
+        const localTime = Number(db._updatedAt) || 0;
+
+        if (cloudTime > localTime) {
+          db = cloudNormalized;
+        } else {
+          // Merge new online orders & online print jobs submitted by customers on https://beit-el-aila-erp.web.app/store
+          if (Array.isArray(cloudNormalized.onlineOrders)) {
+            cloudNormalized.onlineOrders.forEach(co => {
+              const existing = db.onlineOrders.find(lo => lo.id === co.id);
+              if (!existing) {
+                db.onlineOrders.unshift(co);
+              }
+            });
+          }
+          if (Array.isArray(cloudNormalized.printJobs)) {
+            cloudNormalized.printJobs.forEach(cp => {
+              const existing = db.printJobs.find(lp => lp.id === cp.id);
+              if (!existing) {
+                db.printJobs.unshift(cp);
+              }
+            });
+          }
         }
         fs.writeFileSync(DB_FILE, JSON.stringify(db, null, 2), 'utf-8');
       }
@@ -120,6 +144,7 @@ async function pullFromFirebaseCloud() {
 setInterval(pullFromFirebaseCloud, 5000);
 
 function saveDB(action = 'UPDATE_DATA', entity = 'system') {
+  db._updatedAt = Date.now();
   if (!db.syncQueue) db.syncQueue = [];
   if (action) {
     db.syncQueue.unshift({
@@ -187,7 +212,7 @@ app.post('/api/sales', (req, res) => {
   });
 
   const profit = Number(total) - totalCost;
-  const invoiceId = `INV-${1000 + db.sales.length + 1}`;
+  const invoiceId = generateNextId('INV', db.sales, 1000);
 
   const newSale = {
     id: invoiceId,
@@ -281,7 +306,7 @@ app.post('/api/sales/:id/return', (req, res) => {
 // 4. Products Management (Add / Update / Delete / Restock)
 app.post('/api/products', (req, res) => {
   const body = req.body;
-  const id = body.id || `PRD-${1000 + db.products.length + 1}`;
+  const id = body.id || generateNextId('PRD', db.products, 1000);
   const barcode = body.barcode || `622100${Math.floor(100000 + Math.random() * 900000)}`;
   const piecesPerCarton = Math.max(1, Number(body.piecesPerCarton) || 1);
 
@@ -328,7 +353,7 @@ app.delete('/api/products/:id', (req, res) => {
 // Categories Management (Add / Update / Delete)
 app.post('/api/categories', (req, res) => {
   const { id, name, icon = 'Package', color = 'emerald' } = req.body;
-  const catId = id || `CAT-${Date.now().toString().slice(-4)}`;
+  const catId = id || `CAT-${Date.now().toString().slice(-5)}`;
   const newCat = { id: catId, name, icon, color };
   if (!db.categories) db.categories = [];
   const idx = db.categories.findIndex(c => c.id === catId);
@@ -385,7 +410,7 @@ app.post('/api/purchases', (req, res) => {
 app.post('/api/print-jobs', (req, res) => {
   const body = req.body;
   const newJob = {
-    id: `PRJ-${500 + db.printJobs.length + 1}`,
+    id: generateNextId('PRJ', db.printJobs, 500),
     customerName: body.customerName || 'عميل طباعة',
     customerPhone: body.customerPhone || '-',
     description: body.description || 'خدمة طباعة وتصوير',
@@ -419,7 +444,7 @@ app.post('/api/print-jobs', (req, res) => {
 
   // If paid immediately at POS, also record as a POS sale if requested
   if (body.recordInSales) {
-    const invoiceId = `INV-${1000 + db.sales.length + 1}`;
+    const invoiceId = generateNextId('INV', db.sales, 1000);
     db.sales.unshift({
       id: invoiceId,
       createdAt: new Date().toISOString(),
@@ -467,7 +492,7 @@ app.patch('/api/print-jobs/:id', (req, res) => {
 
 app.post('/api/study-notes', (req, res) => {
   const body = req.body;
-  const id = body.id || `NOTE-${200 + db.studyNotes.length + 1}`;
+  const id = body.id || generateNextId('NOTE', db.studyNotes, 200);
   const note = {
     id,
     code: body.code || `M-${Date.now().toString().slice(-4)}`,
@@ -505,7 +530,7 @@ app.post('/api/note-reservations', (req, res) => {
   const paidAmount = Number(body.paidAmount) || 0;
 
   const reservation = {
-    id: `RES-${900 + db.noteReservations.length + 1}`,
+    id: generateNextId('RES', db.noteReservations, 900),
     studentName: body.studentName,
     studentPhone: body.studentPhone,
     noteId: body.noteId,
@@ -550,7 +575,7 @@ app.patch('/api/note-reservations/:id', (req, res) => {
 // 6. Customers & Suppliers (CRM & Credit / Installments)
 app.post('/api/customers', (req, res) => {
   const body = req.body;
-  const id = body.id || `CUS-${db.customers.length + 1}`;
+  const id = body.id || generateNextId('CUS', db.customers, 100);
   const customer = {
     id,
     name: body.name,
@@ -597,7 +622,7 @@ app.post('/api/customers/:id/payment', (req, res) => {
 
 app.post('/api/suppliers', (req, res) => {
   const body = req.body;
-  const id = body.id || `SUP-${db.suppliers.length + 1}`;
+  const id = body.id || generateNextId('SUP', db.suppliers, 100);
   const supplier = {
     id,
     name: body.name,
@@ -644,7 +669,7 @@ app.post('/api/suppliers/:id/payment', (req, res) => {
 app.post('/api/online-orders', (req, res) => {
   const body = req.body;
   const order = {
-    id: `ORD-${700 + db.onlineOrders.length + 1}`,
+    id: generateNextId('ORD', db.onlineOrders, 700),
     customerName: body.customerName,
     customerPhone: body.customerPhone,
     address: body.address || 'استلام من المكتبة',
@@ -717,7 +742,7 @@ app.patch('/api/online-orders/:id', (req, res) => {
       }
     });
 
-    const invoiceId = `INV-${1000 + db.sales.length + 1}`;
+    const invoiceId = generateNextId('INV', db.sales, 1000);
     db.sales.unshift({
       id: invoiceId,
       createdAt: new Date().toISOString(),

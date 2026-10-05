@@ -4,6 +4,7 @@ import {
   PauseCircle, PlayCircle, RotateCcw, UserCheck, CreditCard,
   Banknote, Smartphone, BookOpen, FileText, Sparkles, Check, AlertTriangle
 } from 'lucide-react';
+import { generateNextId } from '../api.js';
 
 export default function POSView({
   state,
@@ -326,7 +327,7 @@ export default function POSView({
     const pieceSell = Number(qaPieceSell || 0);
     const cartonSell = Number(qaCartonSell || pieceSell * ppc);
     const barcode = qaBarcode.trim() || `622100${Math.floor(100000 + Math.random() * 900000)}`;
-    const newId = `PRD-${1000 + state.products.length + 1}`;
+    const newId = generateNextId('PRD', state.products, 1000);
 
     const units = [
       { name: qaBaseUnit || 'قطعة', factor: 1, price: pieceSell, barcode }
@@ -360,12 +361,15 @@ export default function POSView({
       units
     };
 
+    if (selectedCategory !== 'ALL' && selectedCategory !== newProduct.category) {
+      setSelectedCategory('ALL');
+    }
+    setQuickAddModalOpen(false);
+    setSearchQuery('');
+    addProductToCart(newProduct, units[0]);
     if (onSaveProduct) {
       await onSaveProduct(newProduct);
     }
-    addProductToCart(newProduct, units[0]);
-    setQuickAddModalOpen(false);
-    setSearchQuery('');
     setScannerToast(`تم تعريف الصنف "${newProduct.name}" وإضافته للفاتورة فوراً ✓`);
     setTimeout(() => setScannerToast(null), 3000);
   };

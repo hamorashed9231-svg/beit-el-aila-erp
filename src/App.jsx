@@ -3,7 +3,17 @@ import {
   ShoppingCart, Package, Printer, Users, Globe, BarChart3,
   Cloud, Wifi, WifiOff, RefreshCw, BookOpen, Bell, ShieldCheck, AlertTriangle, ExternalLink
 } from 'lucide-react';
-import { getLocalCache, saveLocalCache, apiRequest, pushStateToFirebase, STORAGE_KEY } from './api.js';
+import {
+  getLocalCache,
+  saveLocalCache,
+  apiRequest,
+  pushStateToFirebase,
+  STORAGE_KEY,
+  generateNextId,
+  beginMutation,
+  endMutation,
+  isMutationInProgress
+} from './api.js';
 import POSView from './components/POSView.jsx';
 import InventoryView from './components/InventoryView.jsx';
 import PrintCenterView from './components/PrintCenterView.jsx';
@@ -40,7 +50,9 @@ export default function App() {
   // Initial fetch + live sync between Standalone Store & Library ERP (Online & Offline)
   useEffect(() => {
     async function fetchLatestState() {
+      if (isMutationInProgress()) return;
       const res = await apiRequest('/api/state');
+      if (isMutationInProgress()) return;
       if (!res.offlineFallback && (res.settings || res.products)) {
         setState(res);
         setIsServerConnected(true);
@@ -58,7 +70,9 @@ export default function App() {
     const handleStorageChange = (e) => {
       if (e.key === STORAGE_KEY && e.newValue) {
         try {
-          setState(JSON.parse(e.newValue));
+          const parsed = JSON.parse(e.newValue);
+          saveLocalCache(parsed);
+          setState(parsed);
         } catch (err) {
           console.warn('Storage sync parse error', err);
         }
@@ -83,46 +97,53 @@ export default function App() {
     };
   }, []);
 
-  // Helper to apply state update via Local Server, Firebase Cloud, and Offline Cache
+  // Helper to apply state update synchronously to Local Cache & UI, then sync to Local Server & Firebase Cloud
   const mutateState = async (endpoint, method, body, optimisticUpdater) => {
-    const res = await apiRequest(endpoint, {
-      method,
-      body: body ? JSON.stringify(body) : undefined
-    });
-    if (!res.offlineFallback && res.state) {
-      setState(res.state);
-      setIsServerConnected(true);
-      return res;
-    } else {
-      // Apply mutation locally and push immediately to Firebase Realtime Database
-      let updatedState = null;
-      setState(prev => {
-        const next = optimisticUpdater ? optimisticUpdater(structuredClone(prev)) : prev;
-        if (!next.syncQueue) next.syncQueue = [];
-        next.syncQueue.unshift({
-          id: `SYNC-${Date.now()}`,
-          action: `${method} ${endpoint}`,
-          entity: 'cloud_sync',
-          timestamp: new Date().toISOString(),
-          status: 'synced'
-        });
-        if (next.syncQueue.length > 150) next.syncQueue = next.syncQueue.slice(0, 150);
-        saveLocalCache(next);
-        updatedState = next;
-        return next;
+    beginMutation();
+    try {
+      // 1. Apply mutation synchronously so UI and localStorage are updated immediately (never lost!)
+      const currentSnapshot = getLocalCache();
+      const next = optimisticUpdater ? optimisticUpdater(structuredClone(currentSnapshot)) : structuredClone(currentSnapshot);
+      next._updatedAt = Date.now();
+      if (!next.syncQueue) next.syncQueue = [];
+      next.syncQueue.unshift({
+        id: `SYNC-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+        action: `${method} ${endpoint}`,
+        entity: 'cloud_sync',
+        timestamp: new Date().toISOString(),
+        status: 'synced'
       });
-      if (updatedState) {
-        const synced = await pushStateToFirebase(updatedState);
-        setIsServerConnected(synced);
+      if (next.syncQueue.length > 150) next.syncQueue = next.syncQueue.slice(0, 150);
+
+      const savedLocal = saveLocalCache(next);
+      setState(savedLocal);
+
+      // 2. Try local Express server if running on localhost
+      const res = await apiRequest(endpoint, {
+        method,
+        body: body ? JSON.stringify(body) : undefined
+      });
+      if (!res.offlineFallback && res.state) {
+        const serverState = saveLocalCache({ ...res.state, _updatedAt: Date.now() });
+        setState(serverState);
+        setIsServerConnected(true);
+        return res;
       }
-      return res;
+
+      // 3. Push updated state immediately to Firebase Realtime Database
+      const synced = await pushStateToFirebase(savedLocal);
+      setIsServerConnected(synced);
+      return { state: savedLocal, offlineFallback: !synced };
+    } finally {
+      endMutation();
     }
   };
 
   // 1. Complete POS Sale
   const handleCompleteSale = async (salePayload) => {
+    let createdSale = null;
     const res = await mutateState('/api/sales', 'POST', salePayload, (draft) => {
-      const invoiceId = `INV-${1000 + draft.sales.length + 1}`;
+      const invoiceId = generateNextId('INV', draft.sales, 1000);
       const remainingAmount = Math.max(0, salePayload.total - salePayload.paidAmount);
       let totalCost = 0;
 
@@ -154,15 +175,27 @@ export default function App() {
         status: 'completed'
       };
       draft.sales.unshift(newSale);
+      customer.totalPurchases = (customer.totalPurchases || 0) + Number(salePayload.total);
+      customer.loyaltyPoints = (customer.loyaltyPoints || 0) + Math.floor(Number(salePayload.total) / 10);
       if (remainingAmount > 0) {
         customer.balance = (customer.balance || 0) + remainingAmount;
+        if (!customer.transactions) customer.transactions = [];
+        customer.transactions.unshift({
+          id: `TR-${Date.now()}`,
+          date: new Date().toISOString(),
+          type: 'invoice',
+          amount: remainingAmount,
+          description: `متبقي فاتورة مبيعات آجل #${invoiceId} (إجمالي ${salePayload.total} ج.م - مدفوع ${salePayload.paidAmount} ج.م)`
+        });
       }
-      setActiveReceiptSale(newSale);
+      createdSale = newSale;
       return draft;
     });
 
     if (res && res.sale) {
       setActiveReceiptSale(res.sale);
+    } else if (createdSale) {
+      setActiveReceiptSale(createdSale);
     }
   };
 
@@ -194,9 +227,9 @@ export default function App() {
   // 3. Save Product
   const handleSaveProduct = async (product) => {
     await mutateState('/api/products', 'POST', product, (draft) => {
-      const id = product.id || `PRD-${1000 + draft.products.length + 1}`;
+      const id = product.id || generateNextId('PRD', draft.products, 1000);
       const idx = draft.products.findIndex(p => p.id === id);
-      if (idx >= 0) draft.products[idx] = { ...product, id };
+      if (idx >= 0) draft.products[idx] = { ...draft.products[idx], ...product, id };
       else draft.products.unshift({ ...product, id });
       return draft;
     });
@@ -210,7 +243,7 @@ export default function App() {
   };
 
   const handleSaveCategory = async (catPayload) => {
-    const catId = catPayload.id || `CAT-${Date.now().toString().slice(-4)}`;
+    const catId = catPayload.id || `CAT-${Date.now().toString().slice(-5)}`;
     await mutateState('/api/categories', 'POST', { ...catPayload, id: catId }, (draft) => {
       if (!draft.categories) draft.categories = [];
       const idx = draft.categories.findIndex(c => c.id === catId);
@@ -246,6 +279,16 @@ export default function App() {
         const rem = Math.max(0, totalCost - Number(purchasePayload.paidAmount || 0));
         sup.totalSupplied = (sup.totalSupplied || 0) + totalCost;
         sup.balance = (sup.balance || 0) + rem;
+        if (!sup.transactions) sup.transactions = [];
+        sup.transactions.unshift({
+          id: `STR-${Date.now()}`,
+          date: new Date().toISOString(),
+          type: 'purchase',
+          amount: totalCost,
+          paidAmount: Number(purchasePayload.paidAmount || 0),
+          remaining: rem,
+          description: purchasePayload.notes || `فاتورة توريد بضاعة للمخزن`
+        });
       }
       return draft;
     });
@@ -256,13 +299,24 @@ export default function App() {
     await mutateState('/api/print-jobs', 'POST', jobPayload, (draft) => {
       const newJob = {
         ...jobPayload,
-        id: `PRJ-${500 + draft.printJobs.length + 1}`,
+        id: generateNextId('PRJ', draft.printJobs, 500),
         createdAt: new Date().toISOString()
       };
       draft.printJobs.unshift(newJob);
+
+      const totalImpressions = (Number(newJob.pagesCount) || 1) * (Number(newJob.copies) || 1);
+      if (draft.settings?.copierCounters?.length > 0) {
+        const targetMachine = newJob.colorMode === 'color'
+          ? (draft.settings.copierCounters[1] || draft.settings.copierCounters[0])
+          : draft.settings.copierCounters[0];
+        if (targetMachine) {
+          targetMachine.currentCounter = (targetMachine.currentCounter || 0) + totalImpressions;
+        }
+      }
+
       if (jobPayload.recordInSales) {
         draft.sales.unshift({
-          id: `INV-${1000 + draft.sales.length + 1}`,
+          id: generateNextId('INV', draft.sales, 1000),
           createdAt: new Date().toISOString(),
           cashierName: jobPayload.cashierName || 'مسؤول الطباعة',
           customerId: 'CUS-1',
@@ -304,10 +358,11 @@ export default function App() {
 
   const handleSaveStudyNote = async (notePayload) => {
     await mutateState('/api/study-notes', 'POST', notePayload, (draft) => {
-      const id = notePayload.id || `NOTE-${200 + draft.studyNotes.length + 1}`;
+      const id = notePayload.id || generateNextId('NOTE', draft.studyNotes, 200);
+      const code = notePayload.code || `M-${Date.now().toString().slice(-4)}`;
       const idx = draft.studyNotes.findIndex(n => n.id === id);
-      if (idx >= 0) draft.studyNotes[idx] = { ...notePayload, id };
-      else draft.studyNotes.unshift({ ...notePayload, id });
+      if (idx >= 0) draft.studyNotes[idx] = { ...draft.studyNotes[idx], ...notePayload, id, code };
+      else draft.studyNotes.unshift({ ...notePayload, id, code, reservedCount: 0, totalSold: 0, showOnline: true });
       return draft;
     });
   };
@@ -315,11 +370,16 @@ export default function App() {
   const handleCreateReservation = async (resPayload) => {
     await mutateState('/api/note-reservations', 'POST', resPayload, (draft) => {
       const note = draft.studyNotes.find(n => n.id === resPayload.noteId);
-      const totalPrice = (note ? note.sellPrice : 50) * Number(resPayload.quantity);
+      const qty = Number(resPayload.quantity) || 1;
+      const totalPrice = (note ? note.sellPrice : 50) * qty;
+      if (note) {
+        note.reservedCount = (note.reservedCount || 0) + qty;
+      }
       draft.noteReservations.unshift({
         ...resPayload,
-        id: `RES-${900 + draft.noteReservations.length + 1}`,
+        id: generateNextId('RES', draft.noteReservations, 900),
         noteTitle: note ? `${note.title} - ${note.teacherName}` : '',
+        quantity: qty,
         totalPrice,
         remainingAmount: Math.max(0, totalPrice - Number(resPayload.paidAmount)),
         createdAt: new Date().toISOString()
@@ -338,6 +398,7 @@ export default function App() {
           const note = draft.studyNotes.find(n => n.id === r.noteId);
           if (note) {
             note.stockPrinted = Math.max(0, note.stockPrinted - r.quantity);
+            note.reservedCount = Math.max(0, (note.reservedCount || 0) - r.quantity);
             note.totalSold = (note.totalSold || 0) + r.quantity;
           }
           r.remainingAmount = 0;
@@ -351,7 +412,19 @@ export default function App() {
   // 5. CRM Customers & Suppliers
   const handleSaveCustomer = async (custPayload) => {
     await mutateState('/api/customers', 'POST', custPayload, (draft) => {
-      draft.customers.push({ ...custPayload, id: `CUS-${draft.customers.length + 1}`, transactions: [] });
+      const id = custPayload.id || generateNextId('CUS', draft.customers, 100);
+      const idx = draft.customers.findIndex(c => c.id === id);
+      if (idx >= 0) {
+        draft.customers[idx] = { ...draft.customers[idx], ...custPayload, id };
+      } else {
+        draft.customers.push({
+          loyaltyPoints: 0,
+          totalPurchases: 0,
+          transactions: [],
+          ...custPayload,
+          id
+        });
+      }
       return draft;
     });
   };
@@ -376,7 +449,18 @@ export default function App() {
 
   const handleSaveSupplier = async (supPayload) => {
     await mutateState('/api/suppliers', 'POST', supPayload, (draft) => {
-      draft.suppliers.push({ ...supPayload, id: `SUP-${draft.suppliers.length + 1}`, totalSupplied: 0, transactions: [] });
+      const id = supPayload.id || generateNextId('SUP', draft.suppliers, 100);
+      const idx = draft.suppliers.findIndex(s => s.id === id);
+      if (idx >= 0) {
+        draft.suppliers[idx] = { ...draft.suppliers[idx], ...supPayload, id };
+      } else {
+        draft.suppliers.push({
+          totalSupplied: 0,
+          transactions: [],
+          ...supPayload,
+          id
+        });
+      }
       return draft;
     });
   };
@@ -404,7 +488,7 @@ export default function App() {
     await mutateState('/api/online-orders', 'POST', orderPayload, (draft) => {
       draft.onlineOrders.unshift({
         ...orderPayload,
-        id: `ORD-${700 + draft.onlineOrders.length + 1}`,
+        id: generateNextId('ORD', draft.onlineOrders, 700),
         status: 'new',
         createdAt: new Date().toISOString()
       });
@@ -462,7 +546,7 @@ export default function App() {
             }
           });
           draft.sales.unshift({
-            id: `INV-${1000 + draft.sales.length + 1}`,
+            id: generateNextId('INV', draft.sales, 1000),
             createdAt: new Date().toISOString(),
             cashierName: 'المتجر الإلكتروني',
             customerId: 'CUS-1',

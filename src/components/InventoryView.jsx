@@ -70,7 +70,7 @@ export default function InventoryView({
       name: '',
       barcode: generatedBarcode,
       sku: `SKU-${Math.floor(100 + Math.random() * 900)}`,
-      category: state.categories[0]?.id || 'GENERAL',
+      category: selectedCategory !== 'ALL' ? selectedCategory : (state.categories[0]?.id || 'GENERAL'),
       costPrice: defPieceCost,
       sellPrice: defPieceSell,
       wholesalePrice: defPieceSell - 1,
@@ -175,10 +175,24 @@ export default function InventoryView({
     }));
   };
 
-  const handleSubmitProduct = (e) => {
+  const handleSubmitProduct = async (e) => {
     e.preventDefault();
-    onSaveProduct(editingProduct);
+    let productToSave = { ...editingProduct };
+    if (showInlineCat && inlineNewCatName.trim() && onSaveCategory) {
+      const newId = `CAT-${Date.now().toString().slice(-5)}`;
+      await onSaveCategory({ id: newId, name: inlineNewCatName.trim() });
+      productToSave.category = newId;
+      setInlineNewCatName('');
+      setShowInlineCat(false);
+    }
     setModalOpen(false);
+    if (selectedCategory !== 'ALL' && selectedCategory !== productToSave.category) {
+      setSelectedCategory('ALL');
+    }
+    if (onlyLowStock && productToSave.stock > productToSave.minStock) {
+      setOnlyLowStock(false);
+    }
+    await onSaveProduct(productToSave);
   };
 
   const handleSubmitPurchase = (e) => {

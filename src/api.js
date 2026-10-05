@@ -93,17 +93,57 @@ export function normalizeState(parsed) {
   return parsed;
 }
 
+export function generateNextId(prefix, list = [], startAt = 1000) {
+  let maxNum = startAt;
+  if (Array.isArray(list)) {
+    list.forEach(item => {
+      if (item && typeof item.id === 'string' && item.id.startsWith(`${prefix}-`)) {
+        const numPart = parseInt(item.id.slice(prefix.length + 1), 10);
+        if (!Number.isNaN(numPart) && numPart > maxNum) {
+          maxNum = numPart;
+        }
+      }
+    });
+  }
+  return `${prefix}-${maxNum + 1}`;
+}
+
+let inMemoryState = null;
+let activeMutationsCount = 0;
+
+export function beginMutation() {
+  activeMutationsCount += 1;
+  try {
+    localStorage.setItem(DIRTY_OFFLINE_KEY, '1');
+  } catch (e) {
+    // ignore
+  }
+}
+
+export function endMutation() {
+  activeMutationsCount = Math.max(0, activeMutationsCount - 1);
+}
+
+export function isMutationInProgress() {
+  return activeMutationsCount > 0;
+}
+
 export function getLocalCache() {
   cleanLegacyCache();
+  if (inMemoryState) {
+    return inMemoryState;
+  }
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (raw) {
-      return normalizeState(JSON.parse(raw));
+      inMemoryState = normalizeState(JSON.parse(raw));
+      return inMemoryState;
     }
   } catch (e) {
     console.warn('Failed to read local cache', e);
   }
-  const initial = structuredClone(initialDatabase);
+  const initial = normalizeState(structuredClone(initialDatabase));
+  inMemoryState = initial;
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(initial));
   } catch (e) {
@@ -113,11 +153,14 @@ export function getLocalCache() {
 }
 
 export function saveLocalCache(state) {
+  const normalized = normalizeState(state);
+  inMemoryState = normalized;
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(normalizeState(state)));
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(normalized));
   } catch (e) {
     console.warn('Failed to save local cache', e);
   }
+  return normalized;
 }
 
 export const DIRTY_OFFLINE_KEY = 'beit_el_aila_dirty_offline_v5';
@@ -125,17 +168,30 @@ export const DIRTY_OFFLINE_KEY = 'beit_el_aila_dirty_offline_v5';
 export async function pushStateToFirebase(state) {
   try {
     const normalized = normalizeState(state);
-    normalized._updatedAt = Date.now();
+    if (!normalized._updatedAt) {
+      normalized._updatedAt = Date.now();
+    }
+    const pushTimestamp = normalized._updatedAt;
+    saveLocalCache(normalized);
+
     const res = await fetch(FIREBASE_DB_URL, {
       method: 'PUT',
+      cache: 'no-store',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(normalized)
     });
     if (res.ok) {
-      try {
-        localStorage.removeItem(DIRTY_OFFLINE_KEY);
-      } catch (e) {
-        // ignore
+      // Only clear dirty flag if no newer local mutation happened while PUT was in flight
+      const latestLocal = getLocalCache();
+      if (!latestLocal._updatedAt || latestLocal._updatedAt <= pushTimestamp) {
+        try {
+          localStorage.removeItem(DIRTY_OFFLINE_KEY);
+        } catch (e) {
+          // ignore
+        }
+      } else {
+        // A newer mutation occurred while uploading; push the latest state now
+        await pushStateToFirebase(latestLocal);
       }
       return true;
     }
@@ -151,24 +207,77 @@ export async function pushStateToFirebase(state) {
   }
 }
 
+function hasLocalData(state) {
+  if (!state) return false;
+  return (
+    (state.products && state.products.length > 0) ||
+    (state.categories && state.categories.length > 0) ||
+    (state.sales && state.sales.length > 0) ||
+    (state.studyNotes && state.studyNotes.length > 0) ||
+    (state.printJobs && state.printJobs.length > 0) ||
+    (state.suppliers && state.suppliers.length > 0) ||
+    (state.expenses && state.expenses.length > 0) ||
+    (state.onlineOrders && state.onlineOrders.length > 0)
+  );
+}
+
 export async function fetchStateFromFirebase() {
   try {
-    // If the user worked offline and has unsynced local changes, push them to Firebase first!
+    // Never overwrite local state if a mutation is currently in progress
+    if (isMutationInProgress()) {
+      return { state: getLocalCache(), cloudConnected: true };
+    }
+
+    // If the user has unsynced local changes, push them to Firebase first!
     if (typeof window !== 'undefined' && localStorage.getItem(DIRTY_OFFLINE_KEY) === '1') {
       const localPending = getLocalCache();
       const pushed = await pushStateToFirebase(localPending);
-      if (pushed) {
-        return { state: localPending, cloudConnected: true };
-      }
+      return { state: localPending, cloudConnected: pushed };
     }
 
-    const res = await fetch(FIREBASE_DB_URL);
+    const res = await fetch(FIREBASE_DB_URL, { cache: 'no-store' });
     if (!res.ok) throw new Error(`Firebase HTTP ${res.status}`);
     const data = await res.json();
+
+    // Re-check if user mutated state while GET request was in-flight
+    if (isMutationInProgress() || (typeof window !== 'undefined' && localStorage.getItem(DIRTY_OFFLINE_KEY) === '1')) {
+      return { state: getLocalCache(), cloudConnected: true };
+    }
+
     if (data && (data.settings || data.users || data._initialized)) {
-      const normalized = normalizeState(data);
-      saveLocalCache(normalized);
-      return { state: normalized, cloudConnected: true };
+      const cloudNormalized = normalizeState(data);
+      const localCurrent = getLocalCache();
+
+      const localTime = Number(localCurrent._updatedAt) || 0;
+      const cloudTime = Number(cloudNormalized._updatedAt) || 0;
+
+      // Protect local data if local state is newer than cloud OR if cloud has no timestamp & is empty while local has data
+      if (
+        (localTime > 0 && localTime > cloudTime) ||
+        (cloudTime === 0 && !hasLocalData(cloudNormalized) && hasLocalData(localCurrent))
+      ) {
+        // Merge any new online orders or online print jobs from cloud before pushing local state back up
+        if (Array.isArray(cloudNormalized.onlineOrders)) {
+          cloudNormalized.onlineOrders.forEach(co => {
+            if (!localCurrent.onlineOrders.some(lo => lo.id === co.id)) {
+              localCurrent.onlineOrders.unshift(co);
+            }
+          });
+        }
+        if (Array.isArray(cloudNormalized.printJobs)) {
+          cloudNormalized.printJobs.forEach(cp => {
+            if (!localCurrent.printJobs.some(lp => lp.id === cp.id)) {
+              localCurrent.printJobs.unshift(cp);
+            }
+          });
+        }
+        saveLocalCache(localCurrent);
+        await pushStateToFirebase(localCurrent);
+        return { state: localCurrent, cloudConnected: true };
+      }
+
+      saveLocalCache(cloudNormalized);
+      return { state: cloudNormalized, cloudConnected: true };
     } else {
       // Seed Firebase RTDB on first run
       const initial = getLocalCache();
@@ -181,6 +290,7 @@ export async function fetchStateFromFirebase() {
 }
 
 export async function apiRequest(endpoint, options = {}) {
+  const isGetState = endpoint === '/api/state' && (!options.method || options.method === 'GET');
   const isLocalhost =
     typeof window !== 'undefined' &&
     (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1');
@@ -189,17 +299,22 @@ export async function apiRequest(endpoint, options = {}) {
   if (isLocalhost) {
     try {
       const res = await fetch(endpoint, {
+        cache: 'no-store',
         headers: { 'Content-Type': 'application/json' },
         ...options,
       });
       if (res.ok) {
         const data = await res.json();
-        const nextState = data?.state || (endpoint === '/api/state' && (data?.settings || data?.products) ? data : null);
+        const nextState = data?.state || (isGetState && (data?.settings || data?.products) ? data : null);
         if (nextState) {
           const normalized = normalizeState(nextState);
+          if (!isGetState) {
+            normalized._updatedAt = Date.now();
+          }
           saveLocalCache(normalized);
-          // Background sync to Firebase Cloud
-          pushStateToFirebase(normalized);
+          if (!isGetState) {
+            pushStateToFirebase(normalized);
+          }
         }
         return { ...data, offlineFallback: false };
       }
@@ -209,14 +324,14 @@ export async function apiRequest(endpoint, options = {}) {
   }
 
   // 2. When hosted on Firebase (or when local Node server is off):
-  if (endpoint === '/api/state' && (!options.method || options.method === 'GET')) {
+  if (isGetState) {
     const fb = await fetchStateFromFirebase();
     if (fb.cloudConnected) {
       return { ...fb.state, offlineFallback: false, firebaseCloud: true };
     }
   }
 
-  // Return offlineFallback: true so App.jsx runs its state updater and we sync the resulting state to Firebase
+  // Return offlineFallback: true so App.jsx runs its state updater and syncs the resulting state to Firebase
   const localState = getLocalCache();
   return { state: localState, offlineFallback: true };
 }
