@@ -1,6 +1,12 @@
 {
   "rules": {
     ".read": true,
-    ".write": true
+    ".write": true,
+    "state": {
+      ".validate": "newData.hasChildren(['settings', 'products'])",
+      "settings": {
+        ".validate": "newData.hasChild('storeName')"
+      }
+    }
   }
 }

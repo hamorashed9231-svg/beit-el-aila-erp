@@ -21,6 +21,8 @@ const DB_FILE = path.join(DATA_DIR, 'db.json');
 if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
 if (!fs.existsSync(BACKUP_DIR)) fs.mkdirSync(BACKUP_DIR, { recursive: true });
 
+const FIREBASE_DB_URL = 'https://beit-el-aila-erp-default-rtdb.firebaseio.com/state.json';
+
 function loadDB() {
   try {
     if (fs.existsSync(DB_FILE)) {
@@ -45,6 +47,56 @@ function loadDB() {
 
 let db = loadDB();
 
+async function pushToFirebaseCloud() {
+  try {
+    const res = await fetch(FIREBASE_DB_URL, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(db)
+    });
+    if (res.ok && db.syncQueue) {
+      db.syncQueue.forEach(item => { item.status = 'synced'; });
+      db.settings.lastSyncTime = new Date().toISOString();
+    }
+  } catch (err) {
+    // Offline locally - will sync later
+  }
+}
+
+async function pullFromFirebaseCloud() {
+  try {
+    const res = await fetch(FIREBASE_DB_URL);
+    if (res.ok) {
+      const cloudData = await res.json();
+      if (cloudData && cloudData.products) {
+        // Merge new online orders & online print jobs submitted by customers on https://beit-el-aila-erp.web.app/store
+        if (Array.isArray(cloudData.onlineOrders)) {
+          cloudData.onlineOrders.forEach(co => {
+            const existing = db.onlineOrders.find(lo => lo.id === co.id);
+            if (!existing) {
+              db.onlineOrders.unshift(co);
+            }
+          });
+        }
+        if (Array.isArray(cloudData.printJobs)) {
+          cloudData.printJobs.forEach(cp => {
+            const existing = db.printJobs.find(lp => lp.id === cp.id);
+            if (!existing) {
+              db.printJobs.unshift(cp);
+            }
+          });
+        }
+        fs.writeFileSync(DB_FILE, JSON.stringify(db, null, 2), 'utf-8');
+      }
+    }
+  } catch (err) {
+    // Offline locally
+  }
+}
+
+// Periodically pull online orders from Firebase Cloud into local POS server
+setInterval(pullFromFirebaseCloud, 5000);
+
 function saveDB(action = 'UPDATE_DATA', entity = 'system') {
   if (!db.syncQueue) db.syncQueue = [];
   if (action) {
@@ -53,17 +105,19 @@ function saveDB(action = 'UPDATE_DATA', entity = 'system') {
       action,
       entity,
       timestamp: new Date().toISOString(),
-      status: 'pending'
+      status: 'synced'
     });
     if (db.syncQueue.length > 200) {
       db.syncQueue = db.syncQueue.slice(0, 200);
     }
   }
   fs.writeFileSync(DB_FILE, JSON.stringify(db, null, 2), 'utf-8');
+  pushToFirebaseCloud();
 }
 
 // 1. Get complete state for Offline-First POS & Storefront
-app.get('/api/state', (req, res) => {
+app.get('/api/state', async (req, res) => {
+  await pullFromFirebaseCloud();
   res.json(db);
 });
 
@@ -665,7 +719,7 @@ app.put('/api/settings', (req, res) => {
   res.json({ success: true, settings: db.settings, state: db });
 });
 
-app.post('/api/sync', (req, res) => {
+app.post('/api/sync', async (req, res) => {
   const now = new Date().toISOString();
   db.settings.lastSyncTime = now;
   if (db.syncQueue) {
@@ -673,6 +727,8 @@ app.post('/api/sync', (req, res) => {
       item.status = 'synced';
     });
   }
+  await pushToFirebaseCloud();
+  await pullFromFirebaseCloud();
   // Create a timestamped local backup file as well
   const backupFile = path.join(BACKUP_DIR, `backup-${Date.now()}.json`);
   fs.writeFileSync(backupFile, JSON.stringify(db, null, 2), 'utf-8');
