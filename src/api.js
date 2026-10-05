@@ -80,6 +80,15 @@ export function normalizeState(parsed) {
     if (!parsed.settings.logoUrl) {
       parsed.settings.logoUrl = '/logo.jpg';
     }
+    if (parsed.settings.printPrices && !parsed.settings.printPrices._ownerConfiguredCosts) {
+      parsed.settings.printPrices.paperCostPerSheetA4 = 0;
+      parsed.settings.printPrices.tonerCostPerPageBW = 0;
+      parsed.settings.printPrices.tonerCostPerPageColor = 0;
+      parsed.settings.printPrices.spiralSmallCost = 0;
+      parsed.settings.printPrices.spiralLargeCost = 0;
+      parsed.settings.printPrices.thermalCost = 0;
+      parsed.settings.printPrices.laminationCost = 0;
+    }
   }
   return parsed;
 }

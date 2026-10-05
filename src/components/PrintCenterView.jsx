@@ -12,7 +12,8 @@ export default function PrintCenterView({
   onSaveStudyNote,
   onCreateReservation,
   onUpdateReservation,
-  onOpenBarcodeModal
+  onOpenBarcodeModal,
+  onSaveSettings
 }) {
   const [activeSubTab, setActiveSubTab] = useState('calculator'); // calculator | study_notes | reservations
 
@@ -26,6 +27,10 @@ export default function PrintCenterView({
   const [sides, setSides] = useState('double'); // single | double
   const [binding, setBinding] = useState('spiralSmall'); // none | spiralSmall | spiralLarge | thermal | lamination
   const [customDiscount, setCustomDiscount] = useState(0);
+  const [manualActualCost, setManualActualCost] = useState(''); // Owner can type actual cost directly per job!
+
+  // Owner Print Cost & Selling Prices Configuration Modal
+  const [costSettingsOpen, setCostSettingsOpen] = useState(false);
 
   // Add Study Note Modal
   const [noteModalOpen, setNoteModalOpen] = useState(false);
@@ -62,9 +67,50 @@ export default function PrintCenterView({
     spiralBindingLarge: 25.0,
     thermalBinding: 20.0,
     laminationA4: 10.0,
-    paperCostPerSheetA4: 0.45,
-    tonerCostPerPageBW: 0.15,
-    tonerCostPerPageColor: 1.2
+    paperCostPerSheetA4: 0,
+    tonerCostPerPageBW: 0,
+    tonerCostPerPageColor: 0,
+    spiralSmallCost: 0,
+    spiralLargeCost: 0,
+    thermalCost: 0,
+    laminationCost: 0
+  };
+
+  const [costForm, setCostForm] = useState(() => ({ ...prices }));
+
+  const openCostSettingsModal = () => {
+    setCostForm({
+      bwSingleA4: prices.bwSingleA4 ?? 1.0,
+      bwDoubleA4: prices.bwDoubleA4 ?? 1.5,
+      colorSingleA4: prices.colorSingleA4 ?? 5.0,
+      colorDoubleA4: prices.colorDoubleA4 ?? 8.0,
+      spiralBindingSmall: prices.spiralBindingSmall ?? 15.0,
+      spiralBindingLarge: prices.spiralBindingLarge ?? 25.0,
+      thermalBinding: prices.thermalBinding ?? 20.0,
+      laminationA4: prices.laminationA4 ?? 10.0,
+      paperCostPerSheetA4: prices.paperCostPerSheetA4 ?? 0,
+      tonerCostPerPageBW: prices.tonerCostPerPageBW ?? 0,
+      tonerCostPerPageColor: prices.tonerCostPerPageColor ?? 0,
+      spiralSmallCost: prices.spiralSmallCost ?? 0,
+      spiralLargeCost: prices.spiralLargeCost ?? 0,
+      thermalCost: prices.thermalCost ?? 0,
+      laminationCost: prices.laminationCost ?? 0
+    });
+    setCostSettingsOpen(true);
+  };
+
+  const handleSaveCostSettings = async (e) => {
+    e.preventDefault();
+    if (onSaveSettings) {
+      await onSaveSettings({
+        printPrices: {
+          ...prices,
+          ...Object.fromEntries(Object.entries(costForm).map(([k, v]) => [k, Number(v) || 0])),
+          _ownerConfiguredCosts: true
+        }
+      });
+    }
+    setCostSettingsOpen(false);
   };
 
   // Calculate Print Job Economics
@@ -92,18 +138,18 @@ export default function PrintCenterView({
 
   const bindingPrices = {
     none: 0,
-    spiralSmall: prices.spiralBindingSmall || 15,
-    spiralLarge: prices.spiralBindingLarge || 25,
-    thermal: prices.thermalBinding || 20,
-    lamination: prices.laminationA4 || 10
+    spiralSmall: prices.spiralBindingSmall ?? 15,
+    spiralLarge: prices.spiralBindingLarge ?? 25,
+    thermal: prices.thermalBinding ?? 20,
+    lamination: prices.laminationA4 ?? 10
   };
 
   const bindingCostInternal = {
     none: 0,
-    spiralSmall: 4.5,
-    spiralLarge: 7.5,
-    thermal: 6.0,
-    lamination: 3.0
+    spiralSmall: Number(prices.spiralSmallCost) || 0,
+    spiralLarge: Number(prices.spiralLargeCost) || 0,
+    thermal: Number(prices.thermalCost) || 0,
+    lamination: Number(prices.laminationCost) || 0
   };
 
   const bindingLabels = {
@@ -118,15 +164,16 @@ export default function PrintCenterView({
   const grossSellTotal = singleCopySellPrice * numCopies;
   const finalSellTotal = Math.max(0, grossSellTotal - Number(customDiscount || 0));
 
-  // Internal Actual Cost (Paper + Toner + Binding Material)
+  // Internal Actual Cost (Owner's configured rates OR Owner's direct manual input!)
   const paperFactor = paperSize === 'A3' ? 2 : 1;
-  const paperCost = totalPaperSheets * (prices.paperCostPerSheetA4 || 0.45) * paperFactor;
+  const paperCost = totalPaperSheets * (Number(prices.paperCostPerSheetA4) || 0) * paperFactor;
   const tonerCost =
     numPages *
     numCopies *
-    (colorMode === 'color' ? (prices.tonerCostPerPageColor || 1.2) : (prices.tonerCostPerPageBW || 0.15));
+    (colorMode === 'color' ? (Number(prices.tonerCostPerPageColor) || 0) : (Number(prices.tonerCostPerPageBW) || 0));
   const totalBindingCost = (bindingCostInternal[binding] || 0) * numCopies;
-  const totalEstimatedCost = paperCost + tonerCost + totalBindingCost;
+  const autoCalculatedCost = paperCost + tonerCost + totalBindingCost;
+  const totalEstimatedCost = manualActualCost !== '' ? Math.max(0, Number(manualActualCost) || 0) : autoCalculatedCost;
   const estimatedNetProfit = finalSellTotal - totalEstimatedCost;
 
   const handleSaveAndBillPrintJob = (e) => {
@@ -153,6 +200,7 @@ export default function PrintCenterView({
     setCustomerName('');
     setCustomerPhone('');
     setCustomDiscount(0);
+    setManualActualCost('');
   };
 
   const handleAddStudyNote = (e) => {
@@ -273,14 +321,22 @@ export default function PrintCenterView({
             onSubmit={handleSaveAndBillPrintJob}
             className="lg:col-span-6 bg-white p-5 rounded-2xl border border-slate-200 shadow-sm space-y-4"
           >
-            <div className="border-b border-slate-100 pb-3 flex items-center justify-between">
+            <div className="border-b border-slate-100 pb-3 flex flex-wrap items-center justify-between gap-2">
               <div>
                 <h3 className="font-black text-base text-slate-900 flex items-center gap-2">
                   <Calculator className="w-5 h-5 text-emerald-600" />
                   حاسبة تكلفة الطباعة والتصوير والتغليف الذكية
                 </h3>
-                <p className="text-xs text-slate-500 mt-0.5">تحسب عدد الورق الفعلي وتكلفة الحبر والورق وصافي الربح تلقائياً</p>
+                <p className="text-xs text-slate-500 mt-0.5">صاحب المكتبة يحدد سعر التكلفة الفعلية وسعر البيع للعميل بحرية كاملة</p>
               </div>
+              <button
+                type="button"
+                onClick={openCostSettingsModal}
+                className="bg-slate-900 hover:bg-slate-800 text-white text-[11px] font-black px-3 py-2 rounded-xl flex items-center gap-1.5 shadow-sm transition"
+              >
+                <Settings className="w-3.5 h-3.5 text-amber-400" />
+                إعدادات أسعار وتكلفة الطباعة
+              </button>
             </div>
 
             <div className="grid grid-cols-2 gap-3 text-xs">
@@ -380,18 +436,33 @@ export default function PrintCenterView({
 
             {/* Breakdown Box */}
             <div className="bg-slate-900 text-white p-4 rounded-2xl space-y-2.5 text-xs">
-              <div className="grid grid-cols-3 gap-2 pb-2.5 border-b border-slate-700 text-center">
-                <div className="bg-slate-800 p-2 rounded-xl">
+              <div className="grid grid-cols-3 gap-2 pb-2.5 border-b border-slate-700 text-center items-center">
+                <div className="bg-slate-800 p-2.5 rounded-xl">
                   <span className="text-[10px] text-slate-400 block">الورق الفعلي المستهلك</span>
-                  <span className="font-black text-sm text-white">{totalPaperSheets} ورقة</span>
+                  <span className="font-black text-sm text-white mt-0.5 block">{totalPaperSheets} ورقة</span>
                 </div>
-                <div className="bg-slate-800 p-2 rounded-xl">
-                  <span className="text-[10px] text-slate-400 block">التكلفة الفعلية على المكتبة</span>
-                  <span className="font-black text-sm text-amber-400">{totalEstimatedCost.toFixed(2)} ج.م</span>
+                <div className="bg-slate-800 p-2 rounded-xl border border-amber-500/40">
+                  <label className="text-[10px] text-amber-300 font-bold block mb-1">
+                    التكلفة الفعلية على المكتبة (أدخل التكلفة)
+                  </label>
+                  <div className="flex items-center justify-center gap-1">
+                    <input
+                      type="number"
+                      min="0"
+                      step="0.25"
+                      value={manualActualCost !== '' ? manualActualCost : autoCalculatedCost}
+                      onChange={e => setManualActualCost(e.target.value)}
+                      placeholder="0.00"
+                      className="w-20 bg-slate-900 text-amber-400 font-black text-sm text-center rounded-lg border border-amber-500/50 focus:border-amber-400 py-0.5 outline-none"
+                    />
+                    <span className="text-[11px] font-bold text-amber-400">ج.م</span>
+                  </div>
                 </div>
-                <div className="bg-slate-800 p-2 rounded-xl">
+                <div className="bg-slate-800 p-2.5 rounded-xl">
                   <span className="text-[10px] text-slate-400 block">صافي ربح المكتبة</span>
-                  <span className="font-black text-sm text-emerald-400">+{estimatedNetProfit.toFixed(2)} ج.م</span>
+                  <span className="font-black text-sm text-emerald-400 mt-0.5 block">
+                    +{estimatedNetProfit.toFixed(2)} ج.م
+                  </span>
                 </div>
               </div>
 
@@ -860,6 +931,201 @@ export default function PrintCenterView({
                 type="button"
                 onClick={() => setResModalOpen(false)}
                 className="bg-slate-200 text-slate-800 font-bold py-2.5 px-5 rounded-xl"
+              >
+                إلغاء
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
+
+      {/* Owner Print Cost & Selling Prices Configuration Modal */}
+      {costSettingsOpen && (
+        <div className="fixed inset-0 z-50 bg-slate-900/70 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
+          <form
+            onSubmit={handleSaveCostSettings}
+            className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full p-5 border border-slate-200 space-y-4 text-xs max-h-[92vh] overflow-y-auto"
+          >
+            <div className="flex items-center justify-between border-b border-slate-200 pb-3">
+              <div>
+                <h3 className="font-black text-base text-slate-900 flex items-center gap-2">
+                  <Settings className="w-5 h-5 text-amber-500" />
+                  إعدادات التكلفة الفعلية على المكتبة وأسعار الطباعة للعميل
+                </h3>
+                <p className="text-[11px] text-slate-500">
+                  حدّد هنا التكلفة الفعلية للورق والحبر والتغليف على مكتبتك ليتم حساب التكلفة وصافي الربح بدقة
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setCostSettingsOpen(false)}
+                className="text-slate-500 font-bold"
+              >
+                إغلاق ✕
+              </button>
+            </div>
+
+            {/* Section 1: Actual Cost on the Library */}
+            <div className="bg-amber-50/70 p-4 rounded-2xl border border-amber-200 space-y-3">
+              <h4 className="font-black text-sm text-amber-950">
+                1. التكلفة الفعلية على المكتبة (الورق والحبر والتغليف)
+              </h4>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div className="bg-white p-2.5 rounded-xl border border-amber-200">
+                  <label className="block font-bold text-slate-700 mb-1">تكلفة ورقة A4 الواحدة على المكتبة (ج)</label>
+                  <input
+                    type="number"
+                    step="0.05"
+                    min="0"
+                    value={costForm.paperCostPerSheetA4}
+                    onChange={e => setCostForm({ ...costForm, paperCostPerSheetA4: e.target.value })}
+                    className="w-full rounded-lg border border-slate-300 px-2.5 py-1.5 font-black text-amber-800"
+                  />
+                </div>
+                <div className="bg-white p-2.5 rounded-xl border border-amber-200">
+                  <label className="block font-bold text-slate-700 mb-1">تكلفة حبر الصفحة (أبيض وأسود) (ج)</label>
+                  <input
+                    type="number"
+                    step="0.05"
+                    min="0"
+                    value={costForm.tonerCostPerPageBW}
+                    onChange={e => setCostForm({ ...costForm, tonerCostPerPageBW: e.target.value })}
+                    className="w-full rounded-lg border border-slate-300 px-2.5 py-1.5 font-black text-amber-800"
+                  />
+                </div>
+                <div className="bg-white p-2.5 rounded-xl border border-amber-200">
+                  <label className="block font-bold text-slate-700 mb-1">تكلفة حبر الصفحة (ألوان) (ج)</label>
+                  <input
+                    type="number"
+                    step="0.05"
+                    min="0"
+                    value={costForm.tonerCostPerPageColor}
+                    onChange={e => setCostForm({ ...costForm, tonerCostPerPageColor: e.target.value })}
+                    className="w-full rounded-lg border border-slate-300 px-2.5 py-1.5 font-black text-amber-800"
+                  />
+                </div>
+                <div className="bg-white p-2.5 rounded-xl border border-amber-200">
+                  <label className="block font-bold text-slate-700 mb-1">تكلفة تغليف سلك صغير على المكتبة (ج)</label>
+                  <input
+                    type="number"
+                    step="0.25"
+                    min="0"
+                    value={costForm.spiralSmallCost}
+                    onChange={e => setCostForm({ ...costForm, spiralSmallCost: e.target.value })}
+                    className="w-full rounded-lg border border-slate-300 px-2.5 py-1.5 font-black text-amber-800"
+                  />
+                </div>
+                <div className="bg-white p-2.5 rounded-xl border border-amber-200">
+                  <label className="block font-bold text-slate-700 mb-1">تكلفة تغليف سلك كبير على المكتبة (ج)</label>
+                  <input
+                    type="number"
+                    step="0.25"
+                    min="0"
+                    value={costForm.spiralLargeCost}
+                    onChange={e => setCostForm({ ...costForm, spiralLargeCost: e.target.value })}
+                    className="w-full rounded-lg border border-slate-300 px-2.5 py-1.5 font-black text-amber-800"
+                  />
+                </div>
+                <div className="bg-white p-2.5 rounded-xl border border-amber-200">
+                  <label className="block font-bold text-slate-700 mb-1">تكلفة التغليف الحراري على المكتبة (ج)</label>
+                  <input
+                    type="number"
+                    step="0.25"
+                    min="0"
+                    value={costForm.thermalCost}
+                    onChange={e => setCostForm({ ...costForm, thermalCost: e.target.value })}
+                    className="w-full rounded-lg border border-slate-300 px-2.5 py-1.5 font-black text-amber-800"
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Section 2: Customer Selling Prices */}
+            <div className="bg-emerald-50/70 p-4 rounded-2xl border border-emerald-200 space-y-3">
+              <h4 className="font-black text-sm text-emerald-950">
+                2. أسعار البيع للعميل (للتصوير والطباعة والتغليف)
+              </h4>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div className="bg-white p-2.5 rounded-xl border border-emerald-200">
+                  <label className="block font-bold text-slate-700 mb-1">سعر تصوير A4 أبيض وأسود (وجه واحد)</label>
+                  <input
+                    type="number"
+                    step="0.25"
+                    min="0"
+                    value={costForm.bwSingleA4}
+                    onChange={e => setCostForm({ ...costForm, bwSingleA4: e.target.value })}
+                    className="w-full rounded-lg border border-slate-300 px-2.5 py-1.5 font-black text-emerald-700"
+                  />
+                </div>
+                <div className="bg-white p-2.5 rounded-xl border border-emerald-200">
+                  <label className="block font-bold text-slate-700 mb-1">سعر تصوير A4 أبيض وأسود (وجهين)</label>
+                  <input
+                    type="number"
+                    step="0.25"
+                    min="0"
+                    value={costForm.bwDoubleA4}
+                    onChange={e => setCostForm({ ...costForm, bwDoubleA4: e.target.value })}
+                    className="w-full rounded-lg border border-slate-300 px-2.5 py-1.5 font-black text-emerald-700"
+                  />
+                </div>
+                <div className="bg-white p-2.5 rounded-xl border border-emerald-200">
+                  <label className="block font-bold text-slate-700 mb-1">سعر طباعة A4 ألوان (وجه واحد)</label>
+                  <input
+                    type="number"
+                    step="0.25"
+                    min="0"
+                    value={costForm.colorSingleA4}
+                    onChange={e => setCostForm({ ...costForm, colorSingleA4: e.target.value })}
+                    className="w-full rounded-lg border border-slate-300 px-2.5 py-1.5 font-black text-emerald-700"
+                  />
+                </div>
+                <div className="bg-white p-2.5 rounded-xl border border-emerald-200">
+                  <label className="block font-bold text-slate-700 mb-1">سعر تغليف سلك صغير للعميل</label>
+                  <input
+                    type="number"
+                    step="0.5"
+                    min="0"
+                    value={costForm.spiralBindingSmall}
+                    onChange={e => setCostForm({ ...costForm, spiralBindingSmall: e.target.value })}
+                    className="w-full rounded-lg border border-slate-300 px-2.5 py-1.5 font-black text-emerald-700"
+                  />
+                </div>
+                <div className="bg-white p-2.5 rounded-xl border border-emerald-200">
+                  <label className="block font-bold text-slate-700 mb-1">سعر تغليف سلك كبير للعميل</label>
+                  <input
+                    type="number"
+                    step="0.5"
+                    min="0"
+                    value={costForm.spiralBindingLarge}
+                    onChange={e => setCostForm({ ...costForm, spiralBindingLarge: e.target.value })}
+                    className="w-full rounded-lg border border-slate-300 px-2.5 py-1.5 font-black text-emerald-700"
+                  />
+                </div>
+                <div className="bg-white p-2.5 rounded-xl border border-emerald-200">
+                  <label className="block font-bold text-slate-700 mb-1">سعر التغليف الحراري للعميل</label>
+                  <input
+                    type="number"
+                    step="0.5"
+                    min="0"
+                    value={costForm.thermalBinding}
+                    onChange={e => setCostForm({ ...costForm, thermalBinding: e.target.value })}
+                    className="w-full rounded-lg border border-slate-300 px-2.5 py-1.5 font-black text-emerald-700"
+                  />
+                </div>
+              </div>
+            </div>
+
+            <div className="flex gap-2">
+              <button
+                type="submit"
+                className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white font-black py-3 rounded-xl shadow"
+              >
+                حفظ أسعار وتكاليف الطباعة الخاصة بالمكتبة
+              </button>
+              <button
+                type="button"
+                onClick={() => setCostSettingsOpen(false)}
+                className="bg-slate-200 text-slate-800 font-bold py-3 px-5 rounded-xl"
               >
                 إلغاء
               </button>

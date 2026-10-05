@@ -13,7 +13,7 @@
     "freeDeliveryThreshold": 500,
     "cloudSyncEnabled": true,
     "cloudEndpoint": "https://beit-el-aila-erp-default-rtdb.firebaseio.com/state.json",
-    "lastSyncTime": "2026-10-05T06:59:38.236Z",
+    "lastSyncTime": "2026-10-05T07:12:57.559Z",
     "branchId": "MAIN-POS-01",
     "printPrices": {
       "bwSingleA4": 1,
@@ -27,9 +27,13 @@
       "thermalBinding": 20,
       "laminationA4": 10,
       "laminationId": 5,
-      "paperCostPerSheetA4": 0.45,
-      "tonerCostPerPageBW": 0.15,
-      "tonerCostPerPageColor": 1.2
+      "paperCostPerSheetA4": 0,
+      "tonerCostPerPageBW": 0,
+      "tonerCostPerPageColor": 0,
+      "spiralSmallCost": 0,
+      "spiralLargeCost": 0,
+      "thermalCost": 0,
+      "laminationCost": 0
     },
     "copierCounters": [
       {

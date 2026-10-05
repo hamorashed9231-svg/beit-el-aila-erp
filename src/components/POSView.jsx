@@ -32,6 +32,7 @@ export default function POSView({
   const [qpPages, setQpPages] = useState(10);
   const [qpRate, setQpRate] = useState(1.0);
   const [qpExtra, setQpExtra] = useState(0);
+  const [qpCost, setQpCost] = useState(0);
 
   // Quick Add New Product Modal directly from POS (or when scanning an unknown barcode!)
   const [quickAddModalOpen, setQuickAddModalOpen] = useState(false);
@@ -217,7 +218,7 @@ export default function POSView({
   const handleAddQuickPrint = (e) => {
     e.preventDefault();
     const total = Number(qpPages) * Number(qpRate) + Number(qpExtra);
-    const estCost = Number(qpPages) * 0.55;
+    const estCost = Number(qpCost || 0);
     setCart(prev => [
       ...prev,
       {
@@ -1100,7 +1101,7 @@ export default function POSView({
                 className="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm font-bold"
               />
             </div>
-            <div className="grid grid-cols-3 gap-2">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
               <div>
                 <label className="block text-xs font-bold text-slate-700 mb-1">عدد الورق</label>
                 <input
@@ -1128,6 +1129,18 @@ export default function POSView({
                   value={qpExtra}
                   onChange={e => setQpExtra(e.target.value)}
                   className="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm font-bold"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-amber-800 mb-1">التكلفة على المكتبة</label>
+                <input
+                  type="number"
+                  step="0.25"
+                  min="0"
+                  value={qpCost}
+                  onChange={e => setQpCost(e.target.value)}
+                  placeholder="0.00"
+                  className="w-full rounded-xl border-2 border-amber-400 bg-amber-50 px-3 py-2 text-sm font-black text-amber-900"
                 />
               </div>
             </div>

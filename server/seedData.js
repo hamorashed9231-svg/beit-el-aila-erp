@@ -27,9 +27,13 @@ export const initialDatabase = {
       thermalBinding: 20.0,
       laminationA4: 10.0,
       laminationId: 5.0,
-      paperCostPerSheetA4: 0.45,
-      tonerCostPerPageBW: 0.15,
-      tonerCostPerPageColor: 1.2
+      paperCostPerSheetA4: 0,
+      tonerCostPerPageBW: 0,
+      tonerCostPerPageColor: 0,
+      spiralSmallCost: 0,
+      spiralLargeCost: 0,
+      thermalCost: 0,
+      laminationCost: 0
     },
     copierCounters: [
       { id: "MAC-1", name: "ماكينة تصوير أبيض وأسود (1)", currentCounter: 0, lastServiceCounter: 0, status: "active" },

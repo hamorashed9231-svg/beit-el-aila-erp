@@ -710,6 +710,7 @@ export default function App() {
             onCreateReservation={handleCreateReservation}
             onUpdateReservation={handleUpdateReservation}
             onOpenBarcodeModal={(item) => setActiveBarcodeItem(item)}
+            onSaveSettings={handleSaveSettings}
           />
         )}
 
