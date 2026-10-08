@@ -373,12 +373,25 @@ export default function App() {
   };
 
   const handleSaveStudyNote = async (notePayload) => {
-    await mutateState('/api/study-notes', 'POST', notePayload, (draft) => {
-      const id = notePayload.id || generateNextId('NOTE', draft.studyNotes, 200);
-      const code = notePayload.code || `M-${Date.now().toString().slice(-4)}`;
+    const existingNotes = getLocalCache().studyNotes || [];
+    const id = notePayload.id && String(notePayload.id).trim() !== ''
+      ? notePayload.id
+      : generateNextId('NOTE', existingNotes, 200);
+    const code = notePayload.code || `M-${Date.now().toString().slice(-4)}`;
+    const fullNote = {
+      ...notePayload,
+      id,
+      code,
+      reservedCount: notePayload.reservedCount || 0,
+      totalSold: notePayload.totalSold || 0,
+      showOnline: notePayload.showOnline !== undefined ? notePayload.showOnline : true
+    };
+
+    await mutateState('/api/study-notes', 'POST', fullNote, (draft) => {
+      if (!draft.studyNotes) draft.studyNotes = [];
       const idx = draft.studyNotes.findIndex(n => n.id === id);
-      if (idx >= 0) draft.studyNotes[idx] = { ...draft.studyNotes[idx], ...notePayload, id, code };
-      else draft.studyNotes.unshift({ ...notePayload, id, code, reservedCount: 0, totalSold: 0, showOnline: true });
+      if (idx >= 0) draft.studyNotes[idx] = { ...draft.studyNotes[idx], ...fullNote };
+      else draft.studyNotes.unshift(fullNote);
       return draft;
     });
   };
@@ -427,18 +440,23 @@ export default function App() {
 
   // 5. CRM Customers & Suppliers
   const handleSaveCustomer = async (custPayload) => {
-    await mutateState('/api/customers', 'POST', custPayload, (draft) => {
-      const id = custPayload.id || generateNextId('CUS', draft.customers, 100);
+    const existingCusts = getLocalCache().customers || [];
+    const id = custPayload.id && String(custPayload.id).trim() !== ''
+      ? custPayload.id
+      : generateNextId('CUS', existingCusts, 100);
+    const fullCust = { ...custPayload, id };
+
+    await mutateState('/api/customers', 'POST', fullCust, (draft) => {
+      if (!draft.customers) draft.customers = [];
       const idx = draft.customers.findIndex(c => c.id === id);
       if (idx >= 0) {
-        draft.customers[idx] = { ...draft.customers[idx], ...custPayload, id };
+        draft.customers[idx] = { ...draft.customers[idx], ...fullCust };
       } else {
         draft.customers.push({
           loyaltyPoints: 0,
           totalPurchases: 0,
           transactions: [],
-          ...custPayload,
-          id
+          ...fullCust
         });
       }
       return draft;
@@ -464,17 +482,23 @@ export default function App() {
   };
 
   const handleSaveSupplier = async (supPayload) => {
-    await mutateState('/api/suppliers', 'POST', supPayload, (draft) => {
-      const id = supPayload.id || generateNextId('SUP', draft.suppliers, 100);
+    const existingSups = getLocalCache().suppliers || [];
+    const id = supPayload.id && String(supPayload.id).trim() !== ''
+      ? supPayload.id
+      : generateNextId('SUP', existingSups, 100);
+    const fullSup = { ...supPayload, id };
+
+    await mutateState('/api/suppliers', 'POST', fullSup, (draft) => {
+      if (!draft.suppliers) draft.suppliers = [];
       const idx = draft.suppliers.findIndex(s => s.id === id);
       if (idx >= 0) {
-        draft.suppliers[idx] = { ...draft.suppliers[idx], ...supPayload, id };
+        draft.suppliers[idx] = { ...draft.suppliers[idx], ...fullSup };
       } else {
         draft.suppliers.push({
           totalSupplied: 0,
+          balance: 0,
           transactions: [],
-          ...supPayload,
-          id
+          ...fullSup
         });
       }
       return draft;
