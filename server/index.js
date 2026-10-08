@@ -42,6 +42,13 @@ function normalizeServerDB(parsed) {
   });
   if (!Array.isArray(parsed.users) || parsed.users.length === 0) {
     parsed.users = structuredClone(initialDatabase.users);
+  } else {
+    const admin = parsed.users.find(u => u.id === 'USR-1' || u.role === 'admin') || parsed.users[0];
+    if (admin) {
+      admin.name = 'المدير العام Ahmed kharbosh';
+      admin.pin = '6101994';
+      admin.role = 'admin';
+    }
   }
   if (!Array.isArray(parsed.customers) || parsed.customers.length === 0) {
     parsed.customers = structuredClone(initialDatabase.customers);

@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import {
   ShoppingCart, Package, Printer, Users, Globe, BarChart3,
-  Cloud, Wifi, WifiOff, RefreshCw, BookOpen, Bell, ShieldCheck, AlertTriangle, ExternalLink
+  Cloud, Wifi, WifiOff, RefreshCw, BookOpen, Bell, ShieldCheck, AlertTriangle, ExternalLink,
+  Lock, Unlock, KeyRound, Eye, EyeOff
 } from 'lucide-react';
 import {
   getLocalCache,
@@ -23,12 +24,22 @@ import ReportsAndAdminView from './components/ReportsAndAdminView.jsx';
 import ReceiptModal from './components/ReceiptModal.jsx';
 import BarcodeModal from './components/BarcodeModal.jsx';
 
+export const MANAGER_PASSWORD = '6101994';
+export const PROTECTED_TABS = new Set(['inventory', 'crm', 'online_store', 'reports']);
+
 export default function App() {
   const [state, setState] = useState(() => getLocalCache());
   const [activeNav, setActiveNav] = useState('pos'); // pos | inventory | print_center | crm | online_store | reports
   const [currentUser, setCurrentUser] = useState(() => getLocalCache().users?.[0]);
   const [isServerConnected, setIsServerConnected] = useState(true);
   const [isSyncing, setIsSyncing] = useState(false);
+
+  // Manager Password Protection (Password: 6101994)
+  const [isManagerAuthenticated, setIsManagerAuthenticated] = useState(false);
+  const [passwordModalTarget, setPasswordModalTarget] = useState(null);
+  const [enteredPin, setEnteredPin] = useState('');
+  const [pinError, setPinError] = useState('');
+  const [showPin, setShowPin] = useState(false);
 
   // Detect if opened in Standalone Customer Store mode (/store, ?mode=store, #store, OR any Mobile/Tablet device)
   const [isStandaloneStore] = useState(() => {
@@ -720,6 +731,71 @@ export default function App() {
     { id: 'reports', label: 'الأرباح والمزامنة والإدارة', icon: BarChart3, badge: pendingSyncCount, badgeColor: 'bg-amber-500' }
   ];
 
+  const handleNavClick = (tabId) => {
+    if (tabId === activeNav) return;
+
+    // Free tabs: POS (Cashier) and Print Center
+    if (!PROTECTED_TABS.has(tabId)) {
+      // Auto-lock manager session when switching back to cashier/pos or printing
+      setIsManagerAuthenticated(false);
+      setActiveNav(tabId);
+      return;
+    }
+
+    // Protected tabs: Inventory, CRM, Online Orders, Reports/Admin
+    if (isManagerAuthenticated) {
+      setActiveNav(tabId);
+    } else {
+      const targetItem = navItems.find(item => item.id === tabId) || { id: tabId, label: 'القسم المحمي' };
+      setPasswordModalTarget(targetItem);
+      setEnteredPin('');
+      setPinError('');
+      setShowPin(false);
+    }
+  };
+
+  const handlePasswordSubmit = (e) => {
+    if (e) e.preventDefault();
+    if (enteredPin.trim() === MANAGER_PASSWORD) {
+      setIsManagerAuthenticated(true);
+      if (passwordModalTarget) {
+        setActiveNav(passwordModalTarget.id);
+      }
+      setPasswordModalTarget(null);
+      setEnteredPin('');
+      setPinError('');
+    } else {
+      setPinError('كلمة المرور غير صحيحة! يرجى إدخال باسورد المدير العام Ahmed kharbosh');
+      setEnteredPin('');
+    }
+  };
+
+  const renderProtectedSectionLock = (label, tabId) => (
+    <div className="bg-white rounded-3xl border border-slate-200 p-8 sm:p-12 text-center max-w-md mx-auto my-12 shadow-xl">
+      <div className="w-16 h-16 bg-rose-50 text-rose-600 rounded-2xl flex items-center justify-center mx-auto mb-4 border border-rose-100 shadow-sm">
+        <Lock className="w-8 h-8" />
+      </div>
+      <h2 className="text-xl font-black text-slate-900 mb-1">منطقة محمية بكلمة مرور</h2>
+      <p className="text-xs font-bold text-emerald-700 mb-2">المدير العام Ahmed kharbosh</p>
+      <p className="text-xs text-slate-500 mb-6">
+        قسم: <strong>{label}</strong> محمي بالكامل لمنع الوصول غير المصرح به (أونلاين وأوفلاين)
+      </p>
+      <button
+        onClick={() => {
+          const targetItem = navItems.find(item => item.id === tabId) || { id: tabId, label };
+          setPasswordModalTarget(targetItem);
+          setEnteredPin('');
+          setPinError('');
+          setShowPin(false);
+        }}
+        className="bg-emerald-600 hover:bg-emerald-700 text-white font-black px-6 py-3 rounded-2xl text-xs flex items-center justify-center gap-2 mx-auto shadow-lg shadow-emerald-600/30 transition active:scale-95"
+      >
+        <KeyRound className="w-4 h-4" />
+        إدخال كلمة المرور (6101994)
+      </button>
+    </div>
+  );
+
   return (
     <div className="min-h-screen flex flex-col bg-slate-100 text-slate-900">
       {/* Top Header Bar */}
@@ -750,10 +826,12 @@ export default function App() {
             {navItems.map(item => {
               const Icon = item.icon;
               const isActive = activeNav === item.id;
+              const isProtected = PROTECTED_TABS.has(item.id);
+              const isLocked = isProtected && !isManagerAuthenticated;
               return (
                 <button
                   key={item.id}
-                  onClick={() => setActiveNav(item.id)}
+                  onClick={() => handleNavClick(item.id)}
                   className={`relative px-3.5 py-2 rounded-xl text-xs font-black flex items-center gap-1.5 whitespace-nowrap transition ${
                     isActive
                       ? 'bg-emerald-600 text-white shadow-md shadow-emerald-600/30'
@@ -762,6 +840,9 @@ export default function App() {
                 >
                   <Icon className="w-4 h-4" />
                   <span>{item.label}</span>
+                  {isLocked && (
+                    <Lock className="w-3 h-3 text-amber-400 opacity-80" />
+                  )}
                   {item.badge > 0 && (
                     <span className={`${item.badgeColor} text-white text-[10px] font-black px-1.5 py-0.2 rounded-full`}>
                       {item.badge}
@@ -772,7 +853,7 @@ export default function App() {
             })}
           </nav>
 
-          {/* Right Status: Standalone Store Link + Offline/Cloud Sync + Active Cashier */}
+          {/* Right Status: Standalone Store Link + Lock Button + Offline/Cloud Sync + Manager Name */}
           <div className="flex items-center gap-2">
             <a
               href="/store"
@@ -784,6 +865,20 @@ export default function App() {
               <ExternalLink className="w-3.5 h-3.5" />
               <span className="hidden sm:inline">فتح المتجر المستقل</span>
             </a>
+
+            {isManagerAuthenticated && (
+              <button
+                onClick={() => {
+                  setIsManagerAuthenticated(false);
+                  setActiveNav('pos');
+                }}
+                className="bg-rose-500/20 hover:bg-rose-600 border border-rose-500/40 text-rose-300 hover:text-white px-3 py-1.5 rounded-xl flex items-center gap-1.5 text-xs font-black transition shadow"
+                title="قفل صلاحيات المدير العام والعودة لشاشة الكاشير"
+              >
+                <Lock className="w-3.5 h-3.5" />
+                <span className="hidden md:inline">قفل الإدارة</span>
+              </button>
+            )}
 
             <button
               onClick={handleTriggerCloudSync}
@@ -803,7 +898,7 @@ export default function App() {
 
             <div className="hidden xl:flex items-center gap-2 bg-slate-800 px-3 py-1.5 rounded-xl border border-slate-700 text-xs">
               <ShieldCheck className="w-4 h-4 text-purple-400" />
-              <span className="font-bold text-slate-200">{currentUser?.name}</span>
+              <span className="font-bold text-slate-200">المدير العام Ahmed kharbosh</span>
             </div>
           </div>
         </div>
@@ -824,15 +919,19 @@ export default function App() {
         )}
 
         {activeNav === 'inventory' && (
-          <InventoryView
-            state={state}
-            onSaveProduct={handleSaveProduct}
-            onDeleteProduct={handleDeleteProduct}
-            onCreatePurchase={handleCreatePurchase}
-            onSaveCategory={handleSaveCategory}
-            onDeleteCategory={handleDeleteCategory}
-            onOpenBarcodeModal={(item) => setActiveBarcodeItem(item)}
-          />
+          isManagerAuthenticated ? (
+            <InventoryView
+              state={state}
+              onSaveProduct={handleSaveProduct}
+              onDeleteProduct={handleDeleteProduct}
+              onCreatePurchase={handleCreatePurchase}
+              onSaveCategory={handleSaveCategory}
+              onDeleteCategory={handleDeleteCategory}
+              onOpenBarcodeModal={(item) => setActiveBarcodeItem(item)}
+            />
+          ) : (
+            renderProtectedSectionLock('المخازن والباركود', 'inventory')
+          )
         )}
 
         {activeNav === 'print_center' && (
@@ -850,36 +949,48 @@ export default function App() {
         )}
 
         {activeNav === 'crm' && (
-          <CRMView
-            state={state}
-            onSaveCustomer={handleSaveCustomer}
-            onCustomerPayment={handleCustomerPayment}
-            onSaveSupplier={handleSaveSupplier}
-            onSupplierPayment={handleSupplierPayment}
-          />
+          isManagerAuthenticated ? (
+            <CRMView
+              state={state}
+              onSaveCustomer={handleSaveCustomer}
+              onCustomerPayment={handleCustomerPayment}
+              onSaveSupplier={handleSaveSupplier}
+              onSupplierPayment={handleSupplierPayment}
+            />
+          ) : (
+            renderProtectedSectionLock('العملاء والموردين والآجل', 'crm')
+          )
         )}
 
         {activeNav === 'online_store' && (
-          <OnlineStoreView
-            state={state}
-            isStandalone={false}
-            onSubmitOnlineOrder={handleSubmitOnlineOrder}
-            onUpdateOnlineOrder={handleUpdateOnlineOrder}
-            onSubmitOnlinePrintJob={handleCreatePrintJob}
-          />
+          isManagerAuthenticated ? (
+            <OnlineStoreView
+              state={state}
+              isStandalone={false}
+              onSubmitOnlineOrder={handleSubmitOnlineOrder}
+              onUpdateOnlineOrder={handleUpdateOnlineOrder}
+              onSubmitOnlinePrintJob={handleCreatePrintJob}
+            />
+          ) : (
+            renderProtectedSectionLock('طلبات المتجر المنفصل', 'online_store')
+          )
         )}
 
         {activeNav === 'reports' && (
-          <ReportsAndAdminView
-            state={state}
-            currentUser={currentUser}
-            onSwitchUser={(u) => setCurrentUser(u)}
-            onAddExpense={handleAddExpense}
-            onTriggerCloudSync={handleTriggerCloudSync}
-            onRestoreBackup={handleRestoreBackup}
-            onResetAllData={handleResetAllData}
-            onSaveSettings={handleSaveSettings}
-          />
+          isManagerAuthenticated ? (
+            <ReportsAndAdminView
+              state={state}
+              currentUser={currentUser}
+              onSwitchUser={(u) => setCurrentUser(u)}
+              onAddExpense={handleAddExpense}
+              onTriggerCloudSync={handleTriggerCloudSync}
+              onRestoreBackup={handleRestoreBackup}
+              onResetAllData={handleResetAllData}
+              onSaveSettings={handleSaveSettings}
+            />
+          ) : (
+            renderProtectedSectionLock('الأرباح والمزامنة والإدارة', 'reports')
+          )
         )}
       </main>
 
@@ -899,6 +1010,126 @@ export default function App() {
           storeName={storeName}
           onClose={() => setActiveBarcodeItem(null)}
         />
+      )}
+
+      {/* Manager Password Protection Modal (Password: 6101994) */}
+      {passwordModalTarget && (
+        <div className="fixed inset-0 z-50 bg-slate-900/80 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl shadow-2xl max-w-sm w-full p-6 border border-slate-200 text-center animate-in fade-in zoom-in-95 duration-200">
+            <div className="w-16 h-16 bg-gradient-to-tr from-emerald-600 to-teal-500 text-white rounded-2xl flex items-center justify-center mx-auto mb-3 shadow-lg shadow-emerald-600/30">
+              <KeyRound className="w-8 h-8" />
+            </div>
+
+            <h3 className="font-black text-lg text-slate-900">
+              منطقة محمية بكلمة مرور
+            </h3>
+            <p className="text-xs font-bold text-emerald-700 mt-0.5">
+              المدير العام Ahmed kharbosh
+            </p>
+            <p className="text-[11px] text-slate-500 mt-1 mb-4">
+              أنت تحاول الدخول إلى: <strong className="text-slate-800">{passwordModalTarget.label}</strong>
+              <br />
+              <span className="text-[10px] text-slate-400">(يعمل أونلاين وأوفلاين بدون إنترنت)</span>
+            </p>
+
+            <form onSubmit={handlePasswordSubmit} className="space-y-3">
+              <div className="relative">
+                <input
+                  type={showPin ? 'text' : 'password'}
+                  inputMode="numeric"
+                  autoFocus
+                  placeholder="أدخل الباسورد (6101994)"
+                  value={enteredPin}
+                  onChange={(e) => {
+                    setEnteredPin(e.target.value);
+                    if (pinError) setPinError('');
+                  }}
+                  className={`w-full rounded-2xl border-2 px-4 py-3 text-center text-lg font-black tracking-widest outline-none transition ${
+                    pinError
+                      ? 'border-rose-500 bg-rose-50/50 text-rose-700 focus:border-rose-600'
+                      : 'border-slate-300 bg-slate-50 focus:border-emerald-600 focus:bg-white text-slate-900'
+                  }`}
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPin(!showPin)}
+                  className="absolute left-3 top-1/2 -translate-y-1/2 p-1.5 text-slate-400 hover:text-slate-700"
+                  title={showPin ? 'إخفاء' : 'إظهار'}
+                >
+                  {showPin ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                </button>
+              </div>
+
+              {pinError && (
+                <div className="bg-rose-100 border border-rose-300 text-rose-700 px-3 py-2 rounded-xl text-xs font-bold text-center">
+                  {pinError}
+                </div>
+              )}
+
+              {/* Quick Touch Keypad for Touch Screens and Keypads */}
+              <div className="grid grid-cols-3 gap-1.5 pt-1">
+                {[1, 2, 3, 4, 5, 6, 7, 8, 9].map((num) => (
+                  <button
+                    key={num}
+                    type="button"
+                    onClick={() => {
+                      setEnteredPin((prev) => prev + num);
+                      if (pinError) setPinError('');
+                    }}
+                    className="py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 font-black text-sm active:scale-95 transition"
+                  >
+                    {num}
+                  </button>
+                ))}
+                <button
+                  type="button"
+                  onClick={() => setEnteredPin('')}
+                  className="py-2.5 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-600 font-bold text-xs active:scale-95 transition"
+                >
+                  مسح
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setEnteredPin((prev) => prev + '0');
+                    if (pinError) setPinError('');
+                  }}
+                  className="py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 font-black text-sm active:scale-95 transition"
+                >
+                  0
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setEnteredPin((prev) => prev.slice(0, -1))}
+                  className="py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold text-xs active:scale-95 transition"
+                >
+                  ⌫
+                </button>
+              </div>
+
+              <div className="flex gap-2 pt-2">
+                <button
+                  type="submit"
+                  className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white font-black py-3 rounded-2xl shadow-lg shadow-emerald-600/30 transition text-sm flex items-center justify-center gap-1.5 active:scale-95"
+                >
+                  <Unlock className="w-4 h-4" />
+                  <span>دخول القسم</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setPasswordModalTarget(null);
+                    setEnteredPin('');
+                    setPinError('');
+                  }}
+                  className="bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold px-4 py-3 rounded-2xl transition text-xs"
+                >
+                  إلغاء
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
       )}
     </div>
   );

@@ -42,8 +42,8 @@ export const initialDatabase = {
   },
 
   users: [
-    { id: "USR-1", name: "المدير العام (إدارة بيت العيلة)", username: "admin", pin: "1234", role: "admin", permissions: ["all"], active: true },
-    { id: "USR-2", name: "كاشير بيت العيلة", username: "cashier", pin: "1111", role: "cashier", permissions: ["pos", "print", "orders", "customers"], active: true }
+    { id: "USR-1", name: "المدير العام Ahmed kharbosh", username: "admin", pin: "6101994", role: "admin", permissions: ["all"], active: true },
+    { id: "USR-2", name: "كاشير بيت العيلة", username: "cashier", pin: "1111", role: "cashier", permissions: ["pos", "print"], active: true }
   ],
 
   categories: [],
