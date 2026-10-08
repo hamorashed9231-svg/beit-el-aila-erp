@@ -1,4 +1,4 @@
-const CACHE_NAME = 'beit-el-aila-offline-v6';
+const CACHE_NAME = 'beit-el-aila-offline-v7';
 const PRECACHE_URLS = [
   '/',
   '/index.html',

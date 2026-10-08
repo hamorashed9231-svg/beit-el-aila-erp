@@ -40,14 +40,18 @@ export function normalizeState(parsed) {
   parsed._initialized = true;
   parsed._cleanV5 = true;
 
-  // Firebase RTDB drops empty arrays; ensure all collections exist as arrays (defaulting to empty [])
+  // Firebase RTDB drops empty arrays or converts arrays with numeric keys into objects; ensure all collections exist as clean arrays
   const emptyableCollections = [
     'categories', 'products', 'studyNotes', 'noteReservations',
     'printJobs', 'suppliers', 'sales', 'onlineOrders',
     'expenses', 'shifts', 'syncQueue'
   ];
   emptyableCollections.forEach(key => {
-    if (!Array.isArray(parsed[key])) {
+    if (Array.isArray(parsed[key])) {
+      parsed[key] = parsed[key].filter(Boolean);
+    } else if (parsed[key] && typeof parsed[key] === 'object') {
+      parsed[key] = Object.values(parsed[key]).filter(Boolean);
+    } else {
       parsed[key] = [];
     }
   });
@@ -110,9 +114,11 @@ export function generateNextId(prefix, list = [], startAt = 1000) {
 
 let inMemoryState = null;
 let activeMutationsCount = 0;
+let lastMutationTimestamp = 0;
 
 export function beginMutation() {
   activeMutationsCount += 1;
+  lastMutationTimestamp = Date.now();
   try {
     localStorage.setItem(DIRTY_OFFLINE_KEY, '1');
   } catch (e) {
@@ -122,10 +128,11 @@ export function beginMutation() {
 
 export function endMutation() {
   activeMutationsCount = Math.max(0, activeMutationsCount - 1);
+  lastMutationTimestamp = Date.now();
 }
 
 export function isMutationInProgress() {
-  return activeMutationsCount > 0;
+  return activeMutationsCount > 0 || (Date.now() - lastMutationTimestamp < 5000);
 }
 
 export function getLocalCache() {
@@ -251,16 +258,19 @@ export async function fetchStateFromFirebase() {
       const localTime = Number(localCurrent._updatedAt) || 0;
       const cloudTime = Number(cloudNormalized._updatedAt) || 0;
 
-      // Protect local data if local state is newer than cloud OR if cloud has no timestamp & is empty while local has data
+      // Protect local data if local state is newer or equal to cloud OR if cloud has no timestamp & is empty while local has data OR a recent mutation occurred
       if (
-        (localTime > 0 && localTime > cloudTime) ||
-        (cloudTime === 0 && !hasLocalData(cloudNormalized) && hasLocalData(localCurrent))
+        (localTime > 0 && localTime >= cloudTime) ||
+        (cloudTime === 0 && !hasLocalData(cloudNormalized) && hasLocalData(localCurrent)) ||
+        (Date.now() - lastMutationTimestamp < 8000)
       ) {
         // Merge any new online orders or online print jobs from cloud before pushing local state back up
+        let merged = false;
         if (Array.isArray(cloudNormalized.onlineOrders)) {
           cloudNormalized.onlineOrders.forEach(co => {
             if (!localCurrent.onlineOrders.some(lo => lo.id === co.id)) {
               localCurrent.onlineOrders.unshift(co);
+              merged = true;
             }
           });
         }
@@ -268,11 +278,14 @@ export async function fetchStateFromFirebase() {
           cloudNormalized.printJobs.forEach(cp => {
             if (!localCurrent.printJobs.some(lp => lp.id === cp.id)) {
               localCurrent.printJobs.unshift(cp);
+              merged = true;
             }
           });
         }
-        saveLocalCache(localCurrent);
-        await pushStateToFirebase(localCurrent);
+        if (merged) {
+          saveLocalCache(localCurrent);
+          await pushStateToFirebase(localCurrent);
+        }
         return { state: localCurrent, cloudConnected: true };
       }
 

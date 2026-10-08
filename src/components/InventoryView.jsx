@@ -480,9 +480,9 @@ export default function InventoryView({
                           <Edit3 className="w-4 h-4" />
                         </button>
                         <button
-                          onClick={() => {
+                          onClick={async () => {
                             if (window.confirm(`هل تريد حذف الصنف "${prod.name}"؟`)) {
-                              onDeleteProduct(prod.id);
+                              await onDeleteProduct(prod.id);
                             }
                           }}
                           title="حذف"
@@ -1158,7 +1158,11 @@ export default function InventoryView({
                     {count === 0 && (
                       <button
                         type="button"
-                        onClick={() => onDeleteCategory?.(cat.id)}
+                        onClick={async () => {
+                          if (window.confirm(`هل تريد حذف القسم "${cat.name}"؟`)) {
+                            await onDeleteCategory?.(cat.id);
+                          }
+                        }}
                         className="text-rose-500 hover:text-rose-700 p-1 rounded-lg hover:bg-rose-50"
                         title="حذف القسم"
                       >

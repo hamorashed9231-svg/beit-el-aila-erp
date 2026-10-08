@@ -127,6 +127,7 @@ export default function App() {
         const serverState = saveLocalCache({ ...res.state, _updatedAt: Date.now() });
         setState(serverState);
         setIsServerConnected(true);
+        await pushStateToFirebase(serverState);
         return res;
       }
 
@@ -226,36 +227,51 @@ export default function App() {
 
   // 3. Save Product
   const handleSaveProduct = async (product) => {
-    await mutateState('/api/products', 'POST', product, (draft) => {
-      const id = product.id || generateNextId('PRD', draft.products, 1000);
+    const existingProducts = getLocalCache().products || [];
+    const id = product.id && String(product.id).trim() !== ''
+      ? product.id
+      : generateNextId('PRD', existingProducts, 1000);
+    const fullProduct = { ...product, id };
+
+    return await mutateState('/api/products', 'POST', fullProduct, (draft) => {
+      if (!draft.products) draft.products = [];
       const idx = draft.products.findIndex(p => p.id === id);
-      if (idx >= 0) draft.products[idx] = { ...draft.products[idx], ...product, id };
-      else draft.products.unshift({ ...product, id });
+      if (idx >= 0) draft.products[idx] = { ...draft.products[idx], ...fullProduct };
+      else draft.products.unshift(fullProduct);
       return draft;
     });
   };
 
   const handleDeleteProduct = async (productId) => {
-    await mutateState(`/api/products/${productId}`, 'DELETE', null, (draft) => {
-      draft.products = draft.products.filter(p => p.id !== productId);
+    return await mutateState(`/api/products/${productId}`, 'DELETE', { id: productId }, (draft) => {
+      draft.products = (draft.products || []).filter(p => p.id !== productId);
       return draft;
     });
   };
 
   const handleSaveCategory = async (catPayload) => {
-    const catId = catPayload.id || `CAT-${Date.now().toString().slice(-5)}`;
-    await mutateState('/api/categories', 'POST', { ...catPayload, id: catId }, (draft) => {
+    const existingCats = getLocalCache().categories || [];
+    const catId = catPayload.id && String(catPayload.id).trim() !== ''
+      ? catPayload.id
+      : `CAT-${Date.now().toString().slice(-5)}`;
+    const fullCat = {
+      id: catId,
+      name: catPayload.name,
+      icon: catPayload.icon || 'Package',
+      color: catPayload.color || 'emerald'
+    };
+    await mutateState('/api/categories', 'POST', fullCat, (draft) => {
       if (!draft.categories) draft.categories = [];
       const idx = draft.categories.findIndex(c => c.id === catId);
-      if (idx >= 0) draft.categories[idx] = { ...draft.categories[idx], ...catPayload, id: catId };
-      else draft.categories.push({ id: catId, name: catPayload.name, icon: catPayload.icon || 'Package', color: catPayload.color || 'emerald' });
+      if (idx >= 0) draft.categories[idx] = { ...draft.categories[idx], ...fullCat };
+      else draft.categories.push(fullCat);
       return draft;
     });
     return catId;
   };
 
   const handleDeleteCategory = async (catId) => {
-    await mutateState(`/api/categories/${catId}`, 'DELETE', null, (draft) => {
+    return await mutateState(`/api/categories/${catId}`, 'DELETE', { id: catId }, (draft) => {
       draft.categories = (draft.categories || []).filter(c => c.id !== catId);
       return draft;
     });

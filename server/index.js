@@ -32,7 +32,13 @@ function normalizeServerDB(parsed) {
     'expenses', 'shifts', 'syncQueue'
   ];
   emptyable.forEach(k => {
-    if (!Array.isArray(parsed[k])) parsed[k] = [];
+    if (Array.isArray(parsed[k])) {
+      parsed[k] = parsed[k].filter(Boolean);
+    } else if (parsed[k] && typeof parsed[k] === 'object') {
+      parsed[k] = Object.values(parsed[k]).filter(Boolean);
+    } else {
+      parsed[k] = [];
+    }
   });
   if (!Array.isArray(parsed.users) || parsed.users.length === 0) {
     parsed.users = structuredClone(initialDatabase.users);
