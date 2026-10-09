@@ -1,3 +1,4 @@
+import React, { useState } from 'react';
 import {
   BarChart3, TrendingUp, Wallet, Receipt, ShieldCheck, Cloud,
   RefreshCw, Download, Upload, Plus, CheckCircle2, Lock, Printer, MessageSquare, Send,
