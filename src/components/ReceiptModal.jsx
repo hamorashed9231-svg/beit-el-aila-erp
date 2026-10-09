@@ -61,6 +61,7 @@ export default function ReceiptModal({ sale, settings, onClose }) {
         : `الحالة: *خالص ومسدد بالكامل ✅*`,
       divider,
       settings?.receiptFooter || `شكراً لتعاملكم مع ${storeName}! ✨`,
+      `مشغل بواسطة ريفيكس سيستم • Powered by RIVIX System`,
       `*#${sale.id}*`
     ].filter(Boolean).join('\n');
   };
@@ -266,6 +267,10 @@ export default function ReceiptModal({ sale, settings, onClose }) {
             <p className="text-[11px] text-slate-500 mt-2 leading-relaxed">
               {settings?.receiptFooter || 'شكراً لزيارتكم مكتبة بيت العيلة!'}
             </p>
+            <div className="mt-2 pt-2 border-t border-dotted border-slate-300 flex items-center justify-center gap-1.5 text-[9px] text-slate-500 font-sans">
+              <img src="/rivix-logo.png" alt="Rivix" className="w-3.5 h-3.5 rounded-full object-contain" />
+              <span>مشغل بواسطة ريفيكس سيستم • RIVIX SYSTEM</span>
+            </div>
           </div>
         </div>
 

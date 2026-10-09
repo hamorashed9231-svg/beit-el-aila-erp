@@ -572,6 +572,48 @@ export default function ReportsAndAdminView({
               حفظ الإعدادات
             </button>
           </form>
+
+          {/* Official Rivix System Ownership & Copyright Card */}
+          <div className="lg:col-span-12 bg-gradient-to-r from-slate-900 via-slate-800 to-cyan-950 text-white p-6 rounded-3xl border border-cyan-500/30 shadow-xl">
+            <div className="flex flex-col md:flex-row items-center justify-between gap-6">
+              <div className="flex items-center gap-4 text-right">
+                <img
+                  src="/rivix-logo.png"
+                  alt="Rivix System"
+                  className="w-16 h-16 rounded-2xl object-contain bg-white p-1 border-2 border-cyan-400 shadow-lg shadow-cyan-500/20"
+                />
+                <div>
+                  <div className="flex items-center gap-2.5 flex-wrap">
+                    <h3 className="font-black text-xl text-white tracking-wide">RIVIX SYSTEM</h3>
+                    <span className="bg-cyan-500/20 text-cyan-300 border border-cyan-400/40 text-xs font-black px-3 py-0.5 rounded-full">
+                      نظام معتمد ومرخص رسميًا
+                    </span>
+                  </div>
+                  <p className="text-xs text-slate-300 font-bold mt-1">
+                    المالك والمطور: شركة ريفيكس سيستم • Rivix Operations Platform
+                  </p>
+                  <p className="text-[11px] text-slate-400 mt-0.5">
+                    جميع الحقوق محفوظة لشركة ريفيكس سيستم © {new Date().getFullYear()} Rivix System. All Rights Reserved.
+                  </p>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 w-full md:w-auto text-center text-xs">
+                <div className="bg-white/5 border border-white/10 rounded-2xl p-3">
+                  <div className="text-[10px] text-slate-400">حالة التفعيل</div>
+                  <div className="font-black text-emerald-400 text-sm mt-0.5">أصلي ومفعل ✓</div>
+                </div>
+                <div className="bg-white/5 border border-white/10 rounded-2xl p-3">
+                  <div className="text-[10px] text-slate-400">الترخيص التجاري</div>
+                  <div className="font-black text-cyan-300 text-sm mt-0.5">{storeName}</div>
+                </div>
+                <div className="bg-white/5 border border-white/10 rounded-2xl p-3 col-span-2 sm:col-span-1">
+                  <div className="text-[10px] text-slate-400">الدعم والتحديثات</div>
+                  <div className="font-black text-blue-300 text-sm mt-0.5">ريفيكس سيستم</div>
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
       )}
 

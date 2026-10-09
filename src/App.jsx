@@ -735,13 +735,22 @@ export default function App() {
           />
         </main>
         <footer className="bg-slate-900 text-slate-400 text-xs py-6 px-4 text-center border-t border-slate-800">
-          <div className="max-w-[1440px] mx-auto flex flex-col sm:flex-row items-center justify-between gap-3">
+          <div className="max-w-[1440px] mx-auto flex flex-col sm:flex-row items-center justify-between gap-4">
             <div className="flex items-center gap-2.5">
               <img src={logoUrl} alt={storeName} className="w-8 h-8 rounded-lg object-contain bg-white p-0.5" />
-              <span className="font-black text-white">متجر {storeName} الإلكتروني</span>
-              <span>— جميع الأسعار والأصناف متصلة مباشرة بفرع المكتبة</span>
+              <div className="text-right">
+                <span className="font-black text-white block">متجر {storeName} الإلكتروني</span>
+                <span className="text-[11px] text-slate-400">جميع الأسعار والأصناف متصلة مباشرة بفرع المكتبة</span>
+              </div>
             </div>
-            <div>{state.settings?.phone ? `📞 للتواصل: ${state.settings.phone} • ` : ''}{state.settings?.address}</div>
+            <div className="text-center sm:text-right">{state.settings?.phone ? `📞 للتواصل: ${state.settings.phone} • ` : ''}{state.settings?.address}</div>
+            <div className="flex items-center gap-2.5 pt-2 sm:pt-0 border-t sm:border-t-0 border-slate-800">
+              <img src="/rivix-logo.png" alt="Rivix System" className="w-8 h-8 rounded-xl object-contain bg-slate-800 p-0.5 border border-cyan-500/30" />
+              <div className="text-right">
+                <div className="text-[11px] font-black text-slate-200">مشغل بواسطة RIVIX SYSTEM</div>
+                <div className="text-[10px] text-slate-400">جميع الحقوق محفوظة لشركة ريفيكس سيستم © {new Date().getFullYear()}</div>
+              </div>
+            </div>
           </div>
         </footer>
       </div>
@@ -824,6 +833,11 @@ export default function App() {
         <KeyRound className="w-4 h-4" />
         إدخال كلمة المرور
       </button>
+
+      <div className="mt-6 pt-4 border-t border-slate-100 flex items-center justify-center gap-2 text-[10px] text-slate-400">
+        <img src="/rivix-logo.png" alt="Rivix" className="w-4 h-4 rounded-full object-contain" />
+        <span>منظومة حماية مشغلة بواسطة <strong>RIVIX SYSTEM</strong></span>
+      </div>
     </div>
   );
 
@@ -845,9 +859,13 @@ export default function App() {
                 <span className="bg-blue-500/20 border border-blue-400/30 text-blue-300 text-[10px] font-black px-2 py-0.5 rounded-full">
                   لكل العيلة • ERP + POS
                 </span>
+                <span className="hidden lg:inline-flex items-center gap-1.5 bg-cyan-950/70 border border-cyan-500/40 text-cyan-300 text-[10px] font-black px-2.5 py-0.5 rounded-full shadow-sm">
+                  <img src="/rivix-logo.png" alt="Rivix" className="w-3.5 h-3.5 rounded-full object-contain" />
+                  RIVIX SYSTEM
+                </span>
               </div>
               <p className="text-[11px] text-slate-400 hidden sm:block">
-                النظام الشامل للكاشير والمخازن والطباعة والمذكرات • متصل بالمتجر المستقل
+                النظام الشامل للكاشير والمخازن والطباعة والمذكرات • مشغل بواسطة ريفيكس سيستم
               </p>
             </div>
           </div>
@@ -1029,6 +1047,41 @@ export default function App() {
         )}
       </main>
 
+      {/* System Footer - Rivix System Rights & Branding */}
+      <footer className="no-print mt-auto bg-slate-900 text-slate-400 text-xs py-4 px-4 border-t border-slate-800">
+        <div className="max-w-[1440px] mx-auto flex flex-col md:flex-row items-center justify-between gap-3">
+          <div className="flex items-center gap-3">
+            <img
+              src="/rivix-logo.png"
+              alt="Rivix System"
+              className="w-9 h-9 rounded-xl object-contain bg-slate-800/80 p-0.5 border border-cyan-500/30 shadow-md shadow-cyan-950/50"
+            />
+            <div className="text-right">
+              <div className="flex items-center gap-2">
+                <span className="font-black text-slate-100 text-sm tracking-wide">RIVIX SYSTEM</span>
+                <span className="bg-cyan-500/10 text-cyan-400 border border-cyan-500/30 text-[10px] font-bold px-2 py-0.2 rounded-full">
+                  منصة إدارة العمليات ونقاط البيع
+                </span>
+              </div>
+              <p className="text-[11px] text-slate-400">
+                جميع الحقوق محفوظة لشركة ريفيكس سيستم © {new Date().getFullYear()} Rivix System. All Rights Reserved.
+              </p>
+            </div>
+          </div>
+
+          <div className="flex flex-wrap items-center justify-center gap-3 text-[11px] text-slate-400">
+            <span className="inline-flex items-center gap-1.5 text-emerald-400 font-bold">
+              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+              نظام مرخص ومعتمد
+            </span>
+            <span>•</span>
+            <span>منظومة العمليات وإدارة نقاط البيع</span>
+            <span>•</span>
+            <span className="text-slate-300 font-bold">تطوير ودعم شركة ريفيكس سيستم</span>
+          </div>
+        </div>
+      </footer>
+
       {/* Thermal Receipt Print Modal */}
       {activeReceiptSale && (
         <ReceiptModal
@@ -1163,6 +1216,11 @@ export default function App() {
                 </button>
               </div>
             </form>
+
+            <div className="mt-4 pt-3 border-t border-slate-100 flex items-center justify-center gap-1.5 text-[10px] text-slate-400">
+              <img src="/rivix-logo.png" alt="Rivix" className="w-4 h-4 rounded-full object-contain" />
+              <span>نظام حماية ريفيكس سيستم • Rivix Security Guard</span>
+            </div>
           </div>
         </div>
       )}
