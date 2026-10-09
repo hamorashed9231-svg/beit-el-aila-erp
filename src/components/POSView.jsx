@@ -48,6 +48,12 @@ export default function POSView({
   const [isWholesale, setIsWholesale] = useState(false);
   const [scannerToast, setScannerToast] = useState(null);
 
+  // Return by Invoice Number / Barcode Search State
+  const [historySearchQuery, setHistorySearchQuery] = useState('');
+  const [returnInvoiceInput, setReturnInvoiceInput] = useState('');
+  const [returnModalOpen, setReturnModalOpen] = useState(false);
+  const [selectedReturnSale, setSelectedReturnSale] = useState(null);
+
   // Quick print service modal inside POS
   const [quickPrintOpen, setQuickPrintOpen] = useState(false);
   const [qpDesc, setQpDesc] = useState('تصوير وطباعة أوراق');
@@ -265,6 +271,22 @@ export default function POSView({
   const processScannedOrSearchedCode = (rawCode) => {
     const q = (rawCode || '').trim();
     if (!q) return;
+
+    // 0. Check if scanned code is an Invoice Number (e.g. INV-1001 or 1001 or with barcode wrapping)
+    const cleanInvoiceId = q.toUpperCase().replace(/\*/g, '');
+    const matchedSale = (state.sales || []).find(
+      s => s.id.toUpperCase() === cleanInvoiceId ||
+           s.id.toUpperCase() === `INV-${cleanInvoiceId}` ||
+           cleanInvoiceId.includes(s.id.toUpperCase())
+    );
+    if (matchedSale) {
+      setSearchQuery('');
+      setSelectedReturnSale(matchedSale);
+      setReturnModalOpen(true);
+      setScannerToast(`تم العثور على الفاتورة: #${matchedSale.id} ✓`);
+      setTimeout(() => setScannerToast(null), 3000);
+      return;
+    }
 
     // 1. Check exact unit barcode or product barcode or SKU
     for (const prod of state.products) {
@@ -971,13 +993,59 @@ export default function POSView({
 
         {/* TAB 3: SALES HISTORY & RETURNS */}
         {activeCatalogTab === 'history' && (
-          <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-sm">
-            <div className="p-4 bg-slate-50 border-b border-slate-200 flex items-center justify-between">
-              <h4 className="font-bold text-sm text-slate-800">سجل فواتير الكاشير وإدارة المرتجعات</h4>
-              <span className="text-xs text-slate-500">إجمالي {state.sales.length} فاتورة</span>
+          <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-sm space-y-0">
+            <div className="p-4 bg-slate-50 border-b border-slate-200 space-y-3">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h4 className="font-bold text-sm text-slate-800 flex items-center gap-2">
+                    <RotateCcw className="w-4 h-4 text-rose-600" />
+                    سجل الفواتير والمرتجعات برقم الفاتورة المطبوعة
+                  </h4>
+                  <p className="text-[11px] text-slate-500 mt-0.5">
+                    ابحث برقم الفاتورة (مثال: INV-1001 أو 1001) أو امسح باركود الفاتورة بالليزر فوراً
+                  </p>
+                </div>
+                <span className="text-xs bg-slate-200 text-slate-700 font-bold px-2.5 py-1 rounded-lg">
+                  إجمالي {state.sales.length} فاتورة
+                </span>
+              </div>
+
+              {/* Dedicated Search Input for Invoices */}
+              <div className="relative">
+                <Search className="w-4 h-4 text-slate-400 absolute right-3.5 top-1/2 -translate-y-1/2" />
+                <input
+                  type="text"
+                  value={historySearchQuery}
+                  onChange={e => setHistorySearchQuery(e.target.value)}
+                  placeholder="اكتب رقم الفاتورة المطبوعة (INV-1001) أو اسم العميل أو امسح باركود الفاتورة..."
+                  className="w-full pr-10 pl-24 py-2.5 rounded-xl border border-slate-300 focus:border-rose-500 focus:ring-2 focus:ring-rose-500/20 text-xs font-bold bg-white outline-none transition"
+                />
+                {historySearchQuery && (
+                  <button
+                    onClick={() => setHistorySearchQuery('')}
+                    className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 text-xs font-bold px-2 py-0.5 rounded bg-slate-100"
+                  >
+                    مسح ✕
+                  </button>
+                )}
+              </div>
             </div>
+
             <div className="divide-y divide-slate-100 max-h-[550px] overflow-y-auto">
-              {state.sales.map(sale => (
+              {state.sales
+                .filter(sale => {
+                  const q = historySearchQuery.trim().toLowerCase();
+                  if (!q) return true;
+                  const cleanQ = q.replace(/^inv-?/i, '');
+                  const saleNum = sale.id.replace(/^INV-/i, '').toLowerCase();
+                  return (
+                    sale.id.toLowerCase().includes(q) ||
+                    saleNum.includes(cleanQ) ||
+                    sale.customerName?.toLowerCase().includes(q) ||
+                    sale.items?.some(i => i.name?.toLowerCase().includes(q))
+                  );
+                })
+                .map(sale => (
                 <div key={sale.id} className="p-3.5 hover:bg-slate-50 flex items-center justify-between gap-3 flex-wrap">
                   <div>
                     <div className="flex items-center gap-2">
@@ -2144,6 +2212,111 @@ export default function POSView({
                 </form>
               </div>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* Return by Scanned Invoice Modal */}
+      {returnModalOpen && selectedReturnSale && (
+        <div className="fixed inset-0 z-50 bg-slate-900/80 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl shadow-2xl max-w-lg w-full p-6 border border-slate-200 space-y-4 animate-in fade-in zoom-in-95 duration-200">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <div className="flex items-center gap-3">
+                <div className="w-12 h-12 bg-rose-50 text-rose-600 rounded-2xl flex items-center justify-center">
+                  <RotateCcw className="w-6 h-6" />
+                </div>
+                <div>
+                  <h3 className="font-black text-base text-slate-900">
+                    تفاصيل الفاتورة #{selectedReturnSale.id}
+                  </h3>
+                  <p className="text-xs text-slate-500">
+                    تاريخ: {new Date(selectedReturnSale.createdAt).toLocaleString('ar-EG')} • العميل: {selectedReturnSale.customerName}
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setReturnModalOpen(false);
+                  setSelectedReturnSale(null);
+                }}
+                className="w-8 h-8 rounded-full bg-slate-100 text-slate-500 hover:bg-slate-200 font-bold flex items-center justify-center"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Status & Summary */}
+            <div className="bg-slate-50 rounded-2xl p-4 border border-slate-200 flex items-center justify-between">
+              <div>
+                <span className="text-xs text-slate-500 block font-bold">الحالة الحالية:</span>
+                <span className={`inline-block px-2.5 py-1 rounded-full text-xs font-black mt-1 ${
+                  selectedReturnSale.status === 'returned'
+                    ? 'bg-rose-100 text-rose-700'
+                    : 'bg-emerald-100 text-emerald-800'
+                }`}>
+                  {selectedReturnSale.status === 'returned' ? 'مرتجع بالكامل بالفعل ⚠️' : 'فاتورة نشطة ومكتملة ✓'}
+                </span>
+              </div>
+              <div className="text-left">
+                <span className="text-xs text-slate-500 block font-bold">إجمالي الفاتورة:</span>
+                <span className="text-xl font-black text-slate-900">{selectedReturnSale.total} ج.م</span>
+              </div>
+            </div>
+
+            {/* Items List */}
+            <div>
+              <h4 className="text-xs font-bold text-slate-700 mb-2">الأصناف المشتراة في هذه الفاتورة:</h4>
+              <div className="max-h-48 overflow-y-auto divide-y divide-slate-100 border border-slate-200 rounded-xl">
+                {selectedReturnSale.items?.map((item, idx) => (
+                  <div key={idx} className="p-2.5 text-xs flex items-center justify-between">
+                    <div>
+                      <span className="font-bold text-slate-900">{item.name}</span>
+                      {item.unitName && <span className="text-[11px] text-slate-400 mr-1.5">({item.unitName})</span>}
+                    </div>
+                    <div className="font-mono font-bold text-slate-700">
+                      {item.quantity} × {item.unitPrice} = {item.total} ج
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Actions */}
+            <div className="flex gap-2 pt-2">
+              <button
+                type="button"
+                onClick={() => {
+                  onPrintReceipt(selectedReturnSale);
+                  setReturnModalOpen(false);
+                }}
+                className="flex-1 bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold py-3 rounded-2xl text-xs flex items-center justify-center gap-1.5 transition"
+              >
+                <Printer className="w-4 h-4" />
+                معاينة وطباعة الفاتورة
+              </button>
+
+              {selectedReturnSale.status !== 'returned' ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (window.confirm(`تأكيد عمل مرتجع للفاتورة ${selectedReturnSale.id}؟\nسيتم إرجاع كافة الأصناف للمخزن وخصم الإيراد.`)) {
+                      onReturnSale(selectedReturnSale.id);
+                      setReturnModalOpen(false);
+                      setSelectedReturnSale(null);
+                    }
+                  }}
+                  className="flex-1 bg-rose-600 hover:bg-rose-700 text-white font-black py-3 rounded-2xl text-xs flex items-center justify-center gap-1.5 shadow-lg shadow-rose-600/30 transition"
+                >
+                  <RotateCcw className="w-4 h-4" />
+                  تأكيد عمل مرتجع وإعادة للمخزن
+                </button>
+              ) : (
+                <div className="flex-1 bg-rose-50 border border-rose-200 text-rose-700 text-center py-2.5 rounded-2xl text-xs font-bold">
+                  هذه الفاتورة تم إرجاعها مسبقاً
+                </div>
+              )}
+            </div>
           </div>
         </div>
       )}
