@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import {
   BarChart3, TrendingUp, Wallet, Receipt, ShieldCheck, Cloud,
-  RefreshCw, Download, Upload, Plus, CheckCircle2, Lock, Printer
+  RefreshCw, Download, Upload, Plus, CheckCircle2, Lock, Printer, MessageSquare
 } from 'lucide-react';
 
 export default function ReportsAndAdminView({
@@ -48,8 +48,41 @@ export default function ReportsAndAdminView({
     .reduce((s, sale) => s + Number(sale.paidAmount || 0), 0);
   const creditDeferred = activeSales.reduce((s, sale) => s + Number(sale.remainingAmount || 0), 0);
 
-  const openingShiftCash = state.shifts?.[0]?.openingCash ?? 0;
+  const openingShiftCash = Number(state.settings?.drawerOpeningCash ?? state.shifts?.[0]?.openingCash ?? 0);
   const netCashInDrawer = openingShiftCash + cashCollected - totalExpenses;
+
+  const handleSendReportWhatsApp = () => {
+    const divider = '══════════════════════════';
+    const subDivider = '──────────────────────────';
+    const reportText = [
+      `📊 *تقرير المبيعات والوردية (Shift Z-Report)*`,
+      `🏢 *مكتبة بيت العيلة*`,
+      divider,
+      `*التاريخ والتوقيت:* ${new Date().toLocaleString('ar-EG')}`,
+      `*المستخدم الحالي:* ${currentUser?.name || 'المدير العام'}`,
+      divider,
+      `*💰 جرد نقدية الدرج:*`,
+      `• عهدة بداية الدرج (فكة): ${openingShiftCash.toFixed(2)} ج.م`,
+      `• مبيعات نقدية (كاش): +${cashCollected.toFixed(2)} ج.م`,
+      `• مسحوبات ومصروفات: -${totalExpenses.toFixed(2)} ج.م`,
+      subDivider,
+      `*💵 صافي الكاش الفعلي بالدرج الآن:* ${netCashInDrawer.toFixed(2)} ج.م`,
+      divider,
+      `*📈 ملخص المبيعات والإيرادات:*`,
+      `• إجمالي الفواتير المنفذة: ${activeSales.length} فاتورة`,
+      `• إجمالي الإيرادات: ${totalRevenue.toFixed(2)} ج.م`,
+      `• تكلفة البضاعة المباعة: ${totalCostOfGoods.toFixed(2)} ج.م`,
+      `• مجمل الربح: +${grossProfit.toFixed(2)} ج.م`,
+      `• صافي الربح الحقيقي: ${netProfitAfterExpenses.toFixed(2)} ج.م`,
+      subDivider,
+      `• محفظة فودافون كاش: ${vodafoneCollected.toFixed(2)} ج.م`,
+      `• تحويلات إنستا باي: ${instapayCollected.toFixed(2)} ج.م`,
+      `• آجل ومتبقي على العملاء: ${creditDeferred.toFixed(2)} ج.م`,
+      divider,
+      `✅ تقرير موجه إلى المدير العام Ahmed kharbosh (+20 12 03544606)`
+    ].join('\n');
+    window.open(`https://wa.me/201203544606?text=${encodeURIComponent(reportText)}`, '_blank');
+  };
 
   const handleAddExpSubmit = (e) => {
     e.preventDefault();
@@ -193,13 +226,23 @@ export default function ReportsAndAdminView({
                 </h3>
                 <p className="text-xs text-slate-500">تفصيل المبالغ المحصلة حسب طريقة الدفع والنقدية المتوقعة في درج الكاشير</p>
               </div>
-              <button
-                onClick={() => window.print()}
-                className="bg-slate-100 hover:bg-slate-200 text-slate-800 text-xs font-bold px-3.5 py-2 rounded-xl flex items-center gap-1.5"
-              >
-                <Printer className="w-4 h-4" />
-                طباعة تقرير الوردية
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={handleSendReportWhatsApp}
+                  className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-black px-3.5 py-2 rounded-xl flex items-center gap-1.5 shadow-sm transition-all"
+                  title="إرسال تقرير المبيعات والدرج إلى واتساب المدير (+20 12 03544606)"
+                >
+                  <Send className="w-4 h-4" />
+                  إرسال لواتساب المدير (+20 12 03544606)
+                </button>
+                <button
+                  onClick={() => window.print()}
+                  className="bg-slate-100 hover:bg-slate-200 text-slate-800 text-xs font-bold px-3.5 py-2 rounded-xl flex items-center gap-1.5"
+                >
+                  <Printer className="w-4 h-4" />
+                  طباعة تقرير الوردية
+                </button>
+              </div>
             </div>
 
             <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 text-xs">

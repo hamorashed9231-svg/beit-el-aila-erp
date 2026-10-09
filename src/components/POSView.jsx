@@ -3,7 +3,7 @@ import {
   Search, Barcode, ShoppingCart, Trash2, Plus, Minus, Printer,
   PauseCircle, PlayCircle, RotateCcw, UserCheck, CreditCard,
   Banknote, Smartphone, BookOpen, FileText, Sparkles, Check, AlertTriangle,
-  Lock, KeyRound, Eye, EyeOff, Unlock, ShieldCheck, Wallet
+  Lock, KeyRound, Eye, EyeOff, Unlock, ShieldCheck, Wallet, MessageSquare
 } from 'lucide-react';
 import { generateNextId } from '../api.js';
 
@@ -537,6 +537,43 @@ export default function POSView({
     }
   };
 
+  const MANAGER_WHATSAPP_PHONE = '201203544606';
+
+  const generateDrawerWhatsAppReport = (receipt) => {
+    const divider = '══════════════════════════';
+    const subDivider = '──────────────────────────';
+    const activeSales = (state.sales || []).filter(s => s.status !== 'returned');
+    const totalSalesRevenue = activeSales.reduce((s, sale) => s + Number(sale.total || 0), 0);
+
+    return [
+      `📊 *تقرير تقفيل الدرج والمبيعات (Shift Z-Report)*`,
+      `🏢 *مكتبة بيت العيلة*`,
+      divider,
+      `*رقم حركة التحصيل:* #${receipt.id}`,
+      `*التاريخ والتوقيت:* ${new Date(receipt.date).toLocaleString('ar-EG')}`,
+      `*الكاشير المسلّم:* ${receipt.cashier}`,
+      `*المدير المستلم:* ${receipt.manager}`,
+      divider,
+      `*💰 جرد نقدية الدرج:*`,
+      `• عهدة بداية الدرج (فكة): ${openingShiftCash.toFixed(2)} ج.م`,
+      `• مبيعات نقدية (كاش): +${cashCollected.toFixed(2)} ج.م`,
+      `• مسحوبات ومصروفات: -${totalExpenses.toFixed(2)} ج.م`,
+      subDivider,
+      `*💵 صافي الكاش بالدرج قبل السحب:* ${receipt.drawerBefore.toFixed(2)} ج.م`,
+      `*📥 المبلغ المسلّم للمدير:* ${receipt.amount.toFixed(2)} ج.م`,
+      `*💼 المتبقي بالدرج للشيفت القادم:* ${receipt.drawerAfter.toFixed(2)} ج.م`,
+      divider,
+      `*📈 ملخص المبيعات وطرق الدفع:*`,
+      `• إجمالي فواتير اليوم: ${activeSales.length} فاتورة`,
+      `• إجمالي الإيرادات: ${totalSalesRevenue.toFixed(2)} ج.م`,
+      `• محفظة فودافون كاش: ${vodafoneCollected.toFixed(2)} ج.م`,
+      `• تحويلات إنستا باي: ${instapayCollected.toFixed(2)} ج.م`,
+      divider,
+      `📝 ملاحظات: ${receipt.notes}`,
+      `✅ تم تحصيل الدرج وإغلاق الوردية بنجاح.`
+    ].join('\n');
+  };
+
   const handleConfirmDrawerCollection = async (e) => {
     if (e) e.preventDefault();
     const amount = Number(collectAmount);
@@ -565,6 +602,11 @@ export default function POSView({
       });
     }
     setCollectReceiptData(receipt);
+
+    // Auto-open WhatsApp with the detailed Sales & Cash Drawer Report to +20 12 03544606
+    const reportText = generateDrawerWhatsAppReport(receipt);
+    const waUrl = `https://wa.me/${MANAGER_WHATSAPP_PHONE}?text=${encodeURIComponent(reportText)}`;
+    window.open(waUrl, '_blank');
   };
 
   const handleCheckout = () => {
@@ -1794,25 +1836,38 @@ export default function POSView({
                   </div>
                 </div>
 
-                <div className="flex gap-2">
-                  <button
-                    type="button"
-                    onClick={() => window.print()}
-                    className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white font-black py-3 rounded-2xl shadow flex items-center justify-center gap-1.5 text-xs transition"
-                  >
-                    <Printer className="w-4 h-4" />
-                    طباعة إيصال استلام النقدية
-                  </button>
+                <div className="flex flex-col gap-2">
                   <button
                     type="button"
                     onClick={() => {
-                      setDrawerModalOpen(false);
-                      setCollectReceiptData(null);
+                      const text = generateDrawerWhatsAppReport(collectReceiptData);
+                      window.open(`https://wa.me/${MANAGER_WHATSAPP_PHONE}?text=${encodeURIComponent(text)}`, '_blank');
                     }}
-                    className="bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold px-5 py-3 rounded-2xl text-xs transition"
+                    className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-black py-3 rounded-2xl shadow-lg shadow-emerald-600/30 flex items-center justify-center gap-2 text-xs transition active:scale-95"
                   >
-                    إغلاق
+                    <MessageSquare className="w-4 h-4" />
+                    <span>إرسال تقرير المبيعات للمدير العام (+20 12 03544606)</span>
                   </button>
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      onClick={() => window.print()}
+                      className="flex-1 bg-slate-900 hover:bg-slate-800 text-white font-bold py-2.5 rounded-2xl shadow flex items-center justify-center gap-1.5 text-xs transition"
+                    >
+                      <Printer className="w-4 h-4" />
+                      طباعة إيصال استلام
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setDrawerModalOpen(false);
+                        setCollectReceiptData(null);
+                      }}
+                      className="bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold px-5 py-2.5 rounded-2xl text-xs transition"
+                    >
+                      إغلاق
+                    </button>
+                  </div>
                 </div>
               </div>
             ) : !drawerPinVerified ? (

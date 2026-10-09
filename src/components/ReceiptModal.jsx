@@ -1,8 +1,14 @@
-import React from 'react';
-import { Printer, X, CheckCircle2, Share2 } from 'lucide-react';
+import React, { useState } from 'react';
+import { Printer, X, CheckCircle2, Share2, Image as ImageIcon, Copy, Check, MessageSquare } from 'lucide-react';
+import html2canvas from 'html2canvas';
 
 export default function ReceiptModal({ sale, settings, onClose }) {
   if (!sale) return null;
+
+  const [isGeneratingImage, setIsGeneratingImage] = useState(false);
+  const [copyToast, setCopyToast] = useState('');
+  const [customPhone, setCustomPhone] = useState(sale.customerPhone || '');
+  const [showPhoneInput, setShowPhoneInput] = useState(false);
 
   const paymentLabels = {
     cash: 'نقدي (كاش)',
@@ -18,22 +24,130 @@ export default function ReceiptModal({ sale, settings, onClose }) {
   const storeName = settings?.storeName || 'بيت العيلة';
   const logoUrl = settings?.logoUrl || '/logo.jpg';
 
-  const handleWhatsAppShare = () => {
-    const lines = [
-      `🧾 *فاتورة من ${storeName}*`,
-      `رقم الفاتورة: ${sale.id}`,
-      `التاريخ: ${new Date(sale.createdAt).toLocaleString('ar-EG')}`,
-      `العميل: ${sale.customerName}`,
-      `----------------`,
-      ...sale.items.map(item => `• ${item.name} (${item.quantity} ${item.unitName || ''}) = ${item.total} ج.م`),
-      `----------------`,
-      `الإجمالي الصافي: *${sale.total} ج.م*`,
-      `المدفوع: ${sale.paidAmount} ج.م`,
-      sale.remainingAmount > 0 ? `المتبقي (آجل): ${sale.remainingAmount} ج.م` : `الحالة: خالص بالكامل ✅`,
-      `شكراً لتعاملكم مع ${storeName}!`
-    ];
-    const url = `https://wa.me/?text=${encodeURIComponent(lines.join('\n'))}`;
+  // Format exact Thermal Monospace WhatsApp Text
+  const generateThermalWhatsAppText = () => {
+    const divider = '══════════════════════════';
+    const subDivider = '──────────────────────────';
+
+    const itemLines = (sale.items || []).map((item, idx) => {
+      const unit = item.unitName ? ` [${item.unitName}]` : '';
+      const qtyPrice = `${item.quantity} × ${Number(item.unitPrice).toFixed(2)}`;
+      const total = `${Number(item.total).toFixed(2)} ج.م`;
+      return `${idx + 1}. *${item.name}*${unit}\n   ${qtyPrice} = *${total}*`;
+    }).join('\n');
+
+    return [
+      `🧾 *${storeName}*`,
+      settings?.slogan ? `${settings.slogan}` : 'نظام الكاشير والمكتبة الشامل',
+      settings?.address ? `📍 ${settings.address}` : '',
+      settings?.phone ? `📞 للتواصل: ${settings.phone}` : '',
+      divider,
+      `*رقم الفاتورة:* #${sale.id}`,
+      `*التاريخ:* ${new Date(sale.createdAt).toLocaleString('ar-EG')}`,
+      `*الكاشير:* ${sale.cashierName || 'أحمد محمود'}`,
+      `*العميل:* ${sale.customerName || 'عميل نقدي'}`,
+      `*طريقة الدفع:* ${paymentLabels[sale.paymentMethod] || sale.paymentMethod}`,
+      subDivider,
+      `*بيان الأصناف والمشتريات:*`,
+      itemLines,
+      subDivider,
+      `الإجمالي قبل الخصم: ${Number(sale.subtotal || sale.total).toFixed(2)} ج.م`,
+      Number(sale.discount) > 0 ? `قيمة الخصم الممنوح: -${Number(sale.discount).toFixed(2)} ج.م` : null,
+      divider,
+      `*الإجمالي المطلوب: ${Number(sale.total).toFixed(2)} ج.م*`,
+      `*المبلغ المدفوع: ${Number(sale.paidAmount).toFixed(2)} ج.م*`,
+      Number(sale.remainingAmount) > 0
+        ? `⚠️ *المتبقي (آجل بالحساب): ${Number(sale.remainingAmount).toFixed(2)} ج.م*`
+        : `الحالة: *خالص ومسدد بالكامل ✅*`,
+      divider,
+      settings?.receiptFooter || `شكراً لتعاملكم مع ${storeName}! ✨`,
+      `*#${sale.id}*`
+    ].filter(Boolean).join('\n');
+  };
+
+  const handleWhatsAppTextShare = () => {
+    const text = generateThermalWhatsAppText();
+    let url = '';
+    const cleanPhone = customPhone.replace(/[^0-9]/g, '');
+    if (cleanPhone && cleanPhone.length >= 10) {
+      const formatted = cleanPhone.startsWith('0') ? `2${cleanPhone}` : cleanPhone;
+      url = `https://wa.me/${formatted}?text=${encodeURIComponent(text)}`;
+    } else {
+      url = `https://api.whatsapp.com/send?text=${encodeURIComponent(text)}`;
+    }
     window.open(url, '_blank');
+  };
+
+  // Capture the EXACT thermal receipt as a high-res image for WhatsApp
+  const handleShareReceiptImage = async () => {
+    const receiptElement = document.getElementById('printable-area');
+    if (!receiptElement) return;
+
+    setIsGeneratingImage(true);
+    try {
+      const canvas = await html2canvas(receiptElement, {
+        scale: 2,
+        useCORS: true,
+        backgroundColor: '#ffffff'
+      });
+
+      canvas.toBlob(async (blob) => {
+        if (!blob) {
+          setIsGeneratingImage(false);
+          return;
+        }
+
+        const fileName = `فاتورة_${sale.id}.png`;
+        const file = new File([blob], fileName, { type: 'image/png' });
+
+        // 1. Try Mobile/Native Share sheet (shares direct image to WhatsApp)
+        if (navigator.canShare && navigator.canShare({ files: [file] })) {
+          try {
+            await navigator.share({
+              files: [file],
+              title: `فاتورة ${storeName} #${sale.id}`,
+              text: `فاتورة ${storeName} #${sale.id} للعميل ${sale.customerName}`
+            });
+            setIsGeneratingImage(false);
+            return;
+          } catch (err) {
+            // User cancelled or fallback
+          }
+        }
+
+        // 2. Desktop Fallback: Copy Image to Clipboard for Instant Ctrl+V in WhatsApp Web
+        try {
+          if (navigator.clipboard && window.ClipboardItem) {
+            await navigator.clipboard.write([
+              new ClipboardItem({ 'image/png': blob })
+            ]);
+            setCopyToast('تم نسخ صورة الفاتورة للحافظة! يمكنك لصقها (Ctrl+V) في محادثة الواتساب فوراً ✓');
+            setTimeout(() => setCopyToast(''), 5000);
+          }
+        } catch (clipErr) {
+          console.warn('Clipboard write failed', clipErr);
+        }
+
+        // 3. Download the receipt image file
+        const a = document.createElement('a');
+        a.href = canvas.toDataURL('image/png');
+        a.download = fileName;
+        a.click();
+
+        // 4. Open WhatsApp Web / App
+        const cleanPhone = customPhone.replace(/[^0-9]/g, '');
+        const targetUrl = cleanPhone && cleanPhone.length >= 10
+          ? `https://wa.me/${cleanPhone.startsWith('0') ? `2${cleanPhone}` : cleanPhone}`
+          : 'https://web.whatsapp.com/';
+        window.open(targetUrl, '_blank');
+
+        setIsGeneratingImage(false);
+      }, 'image/png');
+    } catch (err) {
+      console.error('Failed to generate receipt image', err);
+      setIsGeneratingImage(false);
+      alert('حدث خطأ أثناء تصدير صورة الفاتورة، يرجى المحاولة مرة أخرى.');
+    }
   };
 
   return (
@@ -45,7 +159,7 @@ export default function ReceiptModal({ sale, settings, onClose }) {
             <CheckCircle2 className="w-6 h-6" />
             <div>
               <h3 className="font-bold text-base">تم حفظ الفاتورة بنجاح</h3>
-              <p className="text-xs text-emerald-100">جاهزة للطباعة الحرارية 80mm أو الإرسال واتساب</p>
+              <p className="text-xs text-emerald-100">جاهزة للطباعة الحرارية 80mm أو الإرسال واتساب (صورة / نص)</p>
             </div>
           </div>
           <button
@@ -55,6 +169,14 @@ export default function ReceiptModal({ sale, settings, onClose }) {
             <X className="w-5 h-5" />
           </button>
         </div>
+
+        {/* Copy Notification Toast */}
+        {copyToast && (
+          <div className="no-print bg-emerald-100 border-b border-emerald-300 text-emerald-900 px-4 py-2.5 text-xs font-bold flex items-center gap-2 text-center animate-in fade-in">
+            <Check className="w-4 h-4 text-emerald-700 shrink-0" />
+            <span>{copyToast}</span>
+          </div>
+        )}
 
         {/* Printable Thermal Receipt 80mm */}
         <div id="printable-area" className="p-6 bg-white text-slate-900 text-sm font-sans">
@@ -147,28 +269,70 @@ export default function ReceiptModal({ sale, settings, onClose }) {
           </div>
         </div>
 
-        {/* Bottom Buttons */}
-        <div className="no-print bg-slate-50 px-5 py-3.5 border-t border-slate-200 flex items-center gap-2.5">
-          <button
-            onClick={handlePrint}
-            className="flex-1 bg-slate-900 hover:bg-slate-800 text-white font-bold py-2.5 px-4 rounded-xl flex items-center justify-center gap-2 shadow transition"
-          >
-            <Printer className="w-4 h-4" />
-            طباعة الفاتورة (Enter)
-          </button>
-          <button
-            onClick={handleWhatsAppShare}
-            className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-2.5 px-4 rounded-xl flex items-center justify-center gap-1.5 transition"
-          >
-            <Share2 className="w-4 h-4" />
-            واتساب
-          </button>
-          <button
-            onClick={onClose}
-            className="bg-slate-200 hover:bg-slate-300 text-slate-800 font-bold py-2.5 px-4 rounded-xl transition"
-          >
-            إغلاق
-          </button>
+        {/* Optional Customer WhatsApp Phone */}
+        {showPhoneInput && (
+          <div className="no-print bg-slate-100 p-3 border-t border-slate-200 text-xs flex items-center gap-2">
+            <label className="font-bold text-slate-700 whitespace-nowrap">رقم واتساب العميل:</label>
+            <input
+              type="tel"
+              placeholder="010XXXXXXXX"
+              value={customPhone}
+              onChange={(e) => setCustomPhone(e.target.value)}
+              className="flex-1 rounded-lg border border-slate-300 px-3 py-1.5 font-bold outline-none bg-white"
+            />
+          </div>
+        )}
+
+        {/* Bottom Action Buttons */}
+        <div className="no-print bg-slate-50 p-4 border-t border-slate-200 space-y-2">
+          <div className="flex items-center gap-2">
+            <button
+              onClick={handlePrint}
+              className="flex-1 bg-slate-900 hover:bg-slate-800 text-white font-bold py-2.5 px-3 rounded-xl flex items-center justify-center gap-1.5 shadow transition text-xs"
+            >
+              <Printer className="w-4 h-4" />
+              <span>طباعة (Enter)</span>
+            </button>
+
+            {/* Exact Thermal Image to WhatsApp */}
+            <button
+              onClick={handleShareReceiptImage}
+              disabled={isGeneratingImage}
+              className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white font-black py-2.5 px-3 rounded-xl flex items-center justify-center gap-1.5 shadow transition text-xs active:scale-95"
+              title="إرسال صورة طبق الأصل من البون الحراري على الواتساب"
+            >
+              <ImageIcon className="w-4 h-4" />
+              <span>{isGeneratingImage ? 'جاري تجهيز الصورة...' : 'صورة البون (واتساب)'}</span>
+            </button>
+
+            {/* Monospace Formatted Text WhatsApp */}
+            <button
+              onClick={handleWhatsAppTextShare}
+              className="bg-teal-600 hover:bg-teal-700 text-white font-bold py-2.5 px-3 rounded-xl flex items-center justify-center gap-1 text-xs transition"
+              title="إرسال فاتورة نصية منسقة ببيانات وتفاصيل البون"
+            >
+              <MessageSquare className="w-4 h-4" />
+              <span>نص منسق</span>
+            </button>
+
+            <button
+              onClick={onClose}
+              className="bg-slate-200 hover:bg-slate-300 text-slate-800 font-bold py-2.5 px-3 rounded-xl transition text-xs"
+            >
+              إغلاق
+            </button>
+          </div>
+
+          <div className="flex justify-between items-center text-[11px] text-slate-500 pt-1">
+            <button
+              type="button"
+              onClick={() => setShowPhoneInput(!showPhoneInput)}
+              className="text-emerald-700 hover:underline font-bold"
+            >
+              {showPhoneInput ? 'إخفاء رقم الهاتف' : '+ إدخال رقم هاتف العميل للإرسال المباشر'}
+            </button>
+            <span>جاهزة للبون الحراري 80mm والصور</span>
+          </div>
         </div>
       </div>
     </div>
