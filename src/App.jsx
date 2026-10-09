@@ -634,14 +634,32 @@ export default function App() {
 
   const handleTriggerCloudSync = async () => {
     setIsSyncing(true);
-    await mutateState('/api/sync', 'POST', {}, (draft) => {
-      draft.settings.lastSyncTime = new Date().toISOString();
-      if (draft.syncQueue) {
-        draft.syncQueue.forEach(q => (q.status = 'synced'));
+    try {
+      // 1. Fetch from cloud to ensure we have the very latest data
+      const cloudRes = await fetchStateFromFirebase();
+      let mergedState = cloudRes.state;
+
+      // 2. Mark sync time and push
+      mergedState.settings.lastSyncTime = new Date().toISOString();
+      if (mergedState.syncQueue) {
+        mergedState.syncQueue.forEach(q => (q.status = 'synced'));
       }
-      return draft;
-    });
-    setTimeout(() => setIsSyncing(false), 600);
+      mergedState._updatedAt = Date.now();
+      saveLocalCache(mergedState);
+      setState(mergedState);
+
+      const pushed = await pushStateToFirebase(mergedState);
+      setIsServerConnected(pushed);
+      if (pushed) {
+        alert('تمت المزامنة السحابية بنجاح ☁️✓\nجميع البيانات والأرباح والمخازن متطابقة مع السحابة.');
+      } else {
+        alert('تم حفظ البيانات محلياً على الجهاز بنجاح. المزامنة السحابية ستكتمل فور توفر الإنترنت.');
+      }
+    } catch (err) {
+      console.warn('Sync trigger error', err);
+    } finally {
+      setIsSyncing(false);
+    }
   };
 
   const handleRestoreBackup = async (backupData) => {

@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import {
   BarChart3, TrendingUp, Wallet, Receipt, ShieldCheck, Cloud,
-  RefreshCw, Download, Upload, Plus, CheckCircle2, Lock, Printer, MessageSquare
+  RefreshCw, Download, Upload, Plus, CheckCircle2, Lock, Printer, MessageSquare, Send
 } from 'lucide-react';
 
 export default function ReportsAndAdminView({
@@ -33,8 +33,15 @@ export default function ReportsAndAdminView({
   const totalRevenue = activeSales.reduce((s, sale) => s + Number(sale.total || 0), 0);
   const totalCostOfGoods = activeSales.reduce((s, sale) => s + Number(sale.totalCost || 0), 0);
   const grossProfit = totalRevenue - totalCostOfGoods;
+
+  // Distinguish between actual operational business expenses (rent, paper, ink)
+  // and cash drawer transfers/collections handed over to the manager
+  const operationalExpensesList = state.expenses.filter(
+    exp => exp.category !== 'تحصيل وتوريد نقدية للمدير العام'
+  );
+  const totalOperationalExpenses = operationalExpensesList.reduce((s, exp) => s + Number(exp.amount || 0), 0);
   const totalExpenses = state.expenses.reduce((s, exp) => s + Number(exp.amount || 0), 0);
-  const netProfitAfterExpenses = grossProfit - totalExpenses;
+  const netProfitAfterExpenses = grossProfit - totalOperationalExpenses;
 
   // Cash Drawer / Payment Method Breakdown
   const cashCollected = activeSales
@@ -205,8 +212,8 @@ export default function ReportsAndAdminView({
 
             <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm">
               <span className="text-xs font-bold text-slate-500">إجمالي المصروفات التشغيلية</span>
-              <h3 className="text-2xl font-black text-rose-600 mt-1">- {totalExpenses.toLocaleString()} ج.م</h3>
-              <p className="text-[11px] text-slate-400 mt-1">أحبار، ورق، كهرباء، ومستلزمات</p>
+              <h3 className="text-2xl font-black text-rose-600 mt-1">- {totalOperationalExpenses.toLocaleString()} ج.م</h3>
+              <p className="text-[11px] text-slate-400 mt-1">أحبار، ورق، كهرباء، ومستلزمات (دون سحوبات الدرج)</p>
             </div>
 
             <div className="bg-slate-900 text-white p-5 rounded-2xl shadow-lg">
