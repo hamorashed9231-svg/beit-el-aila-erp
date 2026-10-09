@@ -684,16 +684,34 @@ export default function POSView({
     }
   };
 
-  const cashCollected = (state.sales || [])
-    .filter(s => s.status !== 'returned' && s.paymentMethod === 'cash')
+  const getLocalDateStr = (d) => {
+    if (!d) return '';
+    const date = new Date(d);
+    if (isNaN(date.getTime())) return '';
+    const y = date.getFullYear();
+    const m = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    return `${y}-${m}-${day}`;
+  };
+  const todayStr = getLocalDateStr(new Date());
+
+  const todayActiveSales = (state.sales || []).filter(
+    s => s.status !== 'returned' && getLocalDateStr(s.createdAt) === todayStr
+  );
+  const todayExpenses = (state.expenses || []).filter(
+    e => getLocalDateStr(e.createdAt) === todayStr
+  );
+
+  const cashCollected = todayActiveSales
+    .filter(s => s.paymentMethod === 'cash')
     .reduce((sum, s) => sum + (Number(s.paidAmount) || 0), 0);
-  const vodafoneCollected = (state.sales || [])
-    .filter(s => s.status !== 'returned' && s.paymentMethod === 'vodafone_cash')
+  const vodafoneCollected = todayActiveSales
+    .filter(s => s.paymentMethod === 'vodafone_cash')
     .reduce((sum, s) => sum + (Number(s.paidAmount) || 0), 0);
-  const instapayCollected = (state.sales || [])
-    .filter(s => s.status !== 'returned' && s.paymentMethod === 'instapay')
+  const instapayCollected = todayActiveSales
+    .filter(s => s.paymentMethod === 'instapay')
     .reduce((sum, s) => sum + (Number(s.paidAmount) || 0), 0);
-  const totalExpenses = (state.expenses || []).reduce((sum, e) => sum + (Number(e.amount) || 0), 0);
+  const totalExpenses = todayExpenses.reduce((sum, e) => sum + (Number(e.amount) || 0), 0);
   const openingShiftCash = Number(state.settings?.drawerOpeningCash ?? state.shifts?.[0]?.openingCash ?? 0);
   const netCashInDrawer = Math.max(0, openingShiftCash + cashCollected - totalExpenses);
   const netSalesRevenueCash = Math.max(0, cashCollected - totalExpenses);
