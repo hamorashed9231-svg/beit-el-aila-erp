@@ -3,7 +3,8 @@ import {
   Search, Barcode, ShoppingCart, Trash2, Plus, Minus, Printer,
   PauseCircle, PlayCircle, RotateCcw, UserCheck, CreditCard,
   Banknote, Smartphone, BookOpen, FileText, Sparkles, Check, AlertTriangle,
-  Lock, KeyRound, Eye, EyeOff, Unlock, ShieldCheck, Wallet, MessageSquare, Zap
+  Lock, KeyRound, Eye, EyeOff, Unlock, ShieldCheck, Wallet, MessageSquare, Zap,
+  Receipt, Flame, Droplets, Globe, GraduationCap
 } from 'lucide-react';
 import { generateNextId } from '../api.js';
 
@@ -73,14 +74,23 @@ export default function POSView({
   const [walletFee, setWalletFee] = useState(''); // العمولة المكتسبة
   const [walletNotes, setWalletNotes] = useState('');
 
-  // Mobile Balance Recharge (شحن الرصيد وكروت الشحن)
+  // Mobile Balance & Bill Payment Services (شحن الرصيد وسداد الفواتير)
   const [rechargeModalOpen, setRechargeModalOpen] = useState(false);
+  const [serviceModalTab, setServiceModalTab] = useState('mobile'); // 'mobile' | 'bills'
   const [telecomCompany, setTelecomCompany] = useState('vodafone'); // 'vodafone' | 'orange' | 'etisalat' | 'we'
   const [rechargeTargetPhone, setRechargeTargetPhone] = useState('');
   const [rechargeAmount, setRechargeAmount] = useState('10'); // قيمة الرصيد الصافي للعميل
   const [rechargePrice, setRechargePrice] = useState('15'); // المبلغ المستلم من العميل
   const [rechargeCost, setRechargeCost] = useState('14.3'); // التكلفة على ماكينة الشحن (أمان / فوري / تم / بساطة)
   const [rechargeCategory, setRechargeCategory] = useState('balance'); // 'balance' | 'fakka' | 'bill'
+
+  // Bill Payment State (فواتير الكهرباء، المياه، الغاز، الأرضي، الإنترنت، المصاريف)
+  const [billType, setBillType] = useState('electricity'); // 'electricity' | 'water' | 'gas' | 'landline_net' | 'education' | 'other'
+  const [billProviderName, setBillProviderName] = useState('شركة الكهرباء');
+  const [billAccountNo, setBillAccountNo] = useState('');
+  const [billAmount, setBillAmount] = useState('');
+  const [billMachineFee, setBillMachineFee] = useState('3');
+  const [billStoreProfit, setBillStoreProfit] = useState('5');
   const [qpRate, setQpRate] = useState(1.0);
   const [qpExtra, setQpExtra] = useState(0);
   const [qpCost, setQpCost] = useState(0);
@@ -380,6 +390,56 @@ export default function POSView({
 
     setRechargeModalOpen(false);
     setRechargeTargetPhone('');
+  };
+
+  // Add Bill Payment to Cart (سداد فواتير الكهرباء، المياه، الغاز، الأرضي والإنترنت، والمصاريف)
+  const handleAddBillPayment = (e) => {
+    e.preventDefault();
+    const amount = Number(billAmount) || 0;
+    const mFee = Number(billMachineFee) || 0;
+    const profit = Number(billStoreProfit) || 0;
+    if (amount <= 0) return;
+
+    const billTypeLabels = {
+      electricity: 'فاتورة / كارت كهرباء',
+      water: 'فاتورة / كارت مياه',
+      gas: 'فاتورة / كارت غاز طبيعي',
+      landline_net: 'تليفون أرضي وإنترنت منزلي (WE/DSL)',
+      education: 'مصاريف دراسية وجامعات',
+      other: 'سداد فواتير وخدمات إلكترونية'
+    };
+
+    const typeLabel = billTypeLabels[billType] || 'سداد فاتورة';
+    const providerLabel = billProviderName.trim() ? ` - ${billProviderName.trim()}` : '';
+    const accountLabel = billAccountNo.trim() ? ` (رقم/كود: ${billAccountNo.trim()})` : '';
+
+    const costPrice = Number((amount + mFee).toFixed(2));
+    const totalPrice = Number((amount + mFee + profit).toFixed(2));
+
+    setCart(prev => [
+      ...prev,
+      {
+        cartItemId: `BILL-${Date.now()}`,
+        productId: `SRV-BILL-${Date.now().toString().slice(-4)}`,
+        itemType: 'billPayment',
+        billType,
+        billAccountNo: billAccountNo.trim(),
+        name: `سداد ${typeLabel}${providerLabel}${accountLabel} [أصل ${amount}ج + عمولة ${profit}ج]`,
+        unitName: 'فاتورة',
+        factor: 1,
+        availableUnits: [{ name: 'فاتورة', factor: 1, price: totalPrice }],
+        quantity: 1,
+        unitPrice: totalPrice,
+        costPrice: costPrice,
+        profit: Number(profit.toFixed(2)),
+        maxStock: 9999,
+        total: totalPrice
+      }
+    ]);
+
+    setRechargeModalOpen(false);
+    setBillAmount('');
+    setBillAccountNo('');
   };
 
   // Process Barcode Scan (from Laser/USB gun or Search Input)
@@ -876,12 +936,27 @@ export default function POSView({
               </button>
               <button
                 type="button"
-                onClick={() => setRechargeModalOpen(true)}
+                onClick={() => {
+                  setServiceModalTab('mobile');
+                  setRechargeModalOpen(true);
+                }}
                 className="px-3 py-2 rounded-xl text-xs font-black bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white shadow-sm flex items-center gap-1.5 transition"
-                title="شحن رصيد، كروت شحن وفكة ودفع فواتير لكافة الشبكات (فودافون/أورنج/اتصالات/وي)"
+                title="شحن رصيد وكروت شحن وفكة لكافة الشبكات (فودافون/أورنج/اتصالات/وي)"
               >
                 <Zap className="w-4 h-4 text-yellow-200" />
-                + شحن رصيد وكروت (فوري/أمان)
+                + شحن رصيد وكروت
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setServiceModalTab('bills');
+                  setRechargeModalOpen(true);
+                }}
+                className="px-3 py-2 rounded-xl text-xs font-black bg-gradient-to-r from-teal-600 to-emerald-600 hover:from-teal-700 hover:to-emerald-700 text-white shadow-sm flex items-center gap-1.5 transition"
+                title="سداد وشحن فواتير الكهرباء، المياه، الغاز، التليفون الأرضي والإنترنت، والمصاريف"
+              >
+                <Receipt className="w-4 h-4 text-emerald-200" />
+                + دفع وشحن فواتير (فوري/أمان)
               </button>
               <button
                 type="button"
@@ -1765,25 +1840,26 @@ export default function POSView({
         </div>
       )}
 
-      {/* Mobile Recharge (شحن الرصيد وكروت الشحن) Modal */}
+      {/* Mobile Recharge & Bill Payment (شحن الرصيد وسداد الفواتير) Modal */}
       {rechargeModalOpen && (
         <div className="fixed inset-0 z-50 bg-slate-900/70 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
-          <form
-            onSubmit={handleAddRecharge}
-            className="bg-white rounded-3xl shadow-2xl max-w-lg w-full p-6 border border-slate-200 space-y-4 animate-in fade-in zoom-in-95 max-h-[95vh] overflow-y-auto"
-          >
+          <div className="bg-white rounded-3xl shadow-2xl max-w-lg w-full p-6 border border-slate-200 space-y-4 animate-in fade-in zoom-in-95 max-h-[95vh] overflow-y-auto">
             {/* Header */}
             <div className="flex items-center justify-between border-b border-slate-100 pb-3">
               <div className="flex items-center gap-2.5">
-                <div className="w-10 h-10 rounded-2xl bg-amber-100 text-amber-700 flex items-center justify-center font-bold">
-                  <Zap className="w-5 h-5 text-amber-600" />
+                <div className={`w-10 h-10 rounded-2xl flex items-center justify-center font-bold ${
+                  serviceModalTab === 'mobile' ? 'bg-amber-100 text-amber-700' : 'bg-teal-100 text-teal-700'
+                }`}>
+                  {serviceModalTab === 'mobile' ? <Zap className="w-5 h-5 text-amber-600" /> : <Receipt className="w-5 h-5 text-teal-600" />}
                 </div>
                 <div>
                   <h3 className="font-black text-base text-slate-900">
-                    شحن رصيد وكروت (فوري / أمان / بساطة)
+                    {serviceModalTab === 'mobile' ? 'شحن رصيد وكروت المحمول' : 'سداد وشحن الفواتير والخدمات'}
                   </h3>
                   <p className="text-[11px] text-slate-500">
-                    دعم كافة الشبكات، كروت الفكة، وحساب ربح المكتبة آلياً
+                    {serviceModalTab === 'mobile'
+                      ? 'دعم كافة الشبكات، كروت الفكة، وحساب ربح المكتبة آلياً'
+                      : 'فواتير الكهرباء، المياه، الغاز، الأرضي، الإنترنت، والمصاريف (فوري/أمان)'}
                   </p>
                 </div>
               </div>
@@ -1796,178 +1872,470 @@ export default function POSView({
               </button>
             </div>
 
-            {/* Network Selector */}
-            <div>
-              <label className="block text-xs font-bold text-slate-700 mb-1.5">اختر شبكة المحمول:</label>
-              <div className="grid grid-cols-4 gap-2">
-                {[
-                  { id: 'vodafone', name: 'فودافون', en: 'Vodafone', color: 'from-rose-500 to-red-600', activeBg: 'border-red-600 bg-red-50 text-red-700 ring-2 ring-red-500/30' },
-                  { id: 'orange', name: 'أورنج', en: 'Orange', color: 'from-amber-500 to-orange-600', activeBg: 'border-orange-500 bg-orange-50 text-orange-700 ring-2 ring-orange-500/30' },
-                  { id: 'etisalat', name: 'اتصالات', en: 'e& Etisalat', color: 'from-emerald-500 to-green-600', activeBg: 'border-emerald-600 bg-emerald-50 text-emerald-700 ring-2 ring-emerald-500/30' },
-                  { id: 'we', name: 'وي', en: 'WE Telecom', color: 'from-purple-600 to-indigo-700', activeBg: 'border-purple-600 bg-purple-50 text-purple-700 ring-2 ring-purple-500/30' }
-                ].map(net => (
-                  <button
-                    key={net.id}
-                    type="button"
-                    onClick={() => setTelecomCompany(net.id)}
-                    className={`p-2.5 rounded-2xl border-2 font-black text-xs flex flex-col items-center justify-center transition text-center ${
-                      telecomCompany === net.id
-                        ? net.activeBg
-                        : 'border-slate-200 bg-slate-50 text-slate-600 hover:bg-slate-100'
-                    }`}
-                  >
-                    <span className="text-sm font-black">{net.name}</span>
-                    <span className="text-[10px] text-slate-400 font-mono">{net.en}</span>
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {/* Target Phone Number */}
-            <div>
-              <label className="block text-xs font-bold text-slate-700 mb-1">
-                رقم الهاتف المشحون له (اختياري للتوثيق بالفاتورة):
-              </label>
-              <input
-                type="tel"
-                value={rechargeTargetPhone}
-                onChange={e => setRechargeTargetPhone(e.target.value)}
-                placeholder="مثال: 01012345678 أو 011 / 012 / 015..."
-                className="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm font-bold font-mono outline-none focus:border-amber-500"
-              />
-            </div>
-
-            {/* Quick Presets for Egyptian Market */}
-            <div>
-              <div className="flex items-center justify-between mb-1.5">
-                <label className="text-xs font-bold text-slate-700">قوالب الشحن السريعة (الأسعار المعتمدة):</label>
-                <span className="text-[10px] text-slate-400 font-bold">اضغط للاختيار السريع</span>
-              </div>
-              <div className="grid grid-cols-3 sm:grid-cols-4 gap-1.5 text-xs">
-                {[
-                  { label: 'كارت 10 بـ 15ج', bal: 10, price: 15, cost: 14.3 },
-                  { label: 'كارت 20 بـ 28.5ج', bal: 20, price: 28.5, cost: 27.2 },
-                  { label: 'كارت 25 بـ 35ج', bal: 25, price: 35, cost: 33.4 },
-                  { label: 'كارت 50 بـ 70ج', bal: 50, price: 70, cost: 67 },
-                  { label: 'كارت 100 بـ 140ج', bal: 100, price: 140, cost: 134 },
-                  { label: 'فكة 5 (بـ 7ج)', bal: 5, price: 7, cost: 6.5 },
-                  { label: 'فكة 7 (بـ 9.5ج)', bal: 7, price: 9.5, cost: 8.9 },
-                  { label: 'فكة 10 (بـ 13ج)', bal: 10, price: 13, cost: 12.2 }
-                ].map((p, idx) => {
-                  const isSelected = Number(rechargePrice) === p.price && Number(rechargeAmount) === p.bal;
-                  return (
-                    <button
-                      key={idx}
-                      type="button"
-                      onClick={() => handleSelectRechargePreset(p.bal, p.price, p.cost)}
-                      className={`p-2 rounded-xl border text-center transition font-bold ${
-                        isSelected
-                          ? 'border-amber-500 bg-amber-50 text-amber-900 shadow-sm'
-                          : 'border-slate-200 bg-white hover:bg-slate-50 text-slate-700'
-                      }`}
-                    >
-                      <div className="text-[11px] leading-tight font-black">{p.label}</div>
-                      <div className="text-[9px] text-slate-400 mt-0.5">ربح: +{(p.price - p.cost).toFixed(1)}ج</div>
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-
-            {/* Custom Amounts */}
-            <div className="grid grid-cols-3 gap-2">
-              <div>
-                <label className="block text-[11px] font-bold text-slate-700 mb-1">
-                  الرصيد الصافي (ج):
-                </label>
-                <input
-                  type="number"
-                  min="1"
-                  step="any"
-                  value={rechargeAmount}
-                  onChange={e => setRechargeAmount(e.target.value)}
-                  placeholder="10"
-                  className="w-full rounded-xl border-2 border-slate-300 focus:border-amber-500 px-2 py-2 text-sm font-black text-slate-900 outline-none text-center"
-                />
-              </div>
-
-              <div>
-                <label className="block text-[11px] font-bold text-purple-700 mb-1">
-                  المطلوب من العميل (ج):
-                </label>
-                <input
-                  type="number"
-                  required
-                  min="1"
-                  step="any"
-                  value={rechargePrice}
-                  onChange={e => {
-                    const pr = e.target.value;
-                    setRechargePrice(pr);
-                    if (Number(pr) > 0 && (!rechargeCost || Number(rechargeCost) === 0)) {
-                      setRechargeCost(String((Number(pr) * 0.96).toFixed(2)));
-                    }
-                  }}
-                  placeholder="15"
-                  className="w-full rounded-xl border-2 border-purple-400 bg-purple-50/50 focus:border-purple-600 px-2 py-2 text-sm font-black text-purple-900 outline-none text-center"
-                />
-              </div>
-
-              <div>
-                <label className="block text-[11px] font-bold text-slate-600 mb-1">
-                  التكلفة عالماكينة (ج):
-                </label>
-                <input
-                  type="number"
-                  min="0"
-                  step="any"
-                  value={rechargeCost}
-                  onChange={e => setRechargeCost(e.target.value)}
-                  placeholder="14.3"
-                  className="w-full rounded-xl border-2 border-slate-300 focus:border-slate-500 px-2 py-2 text-sm font-black text-slate-800 outline-none text-center"
-                />
-              </div>
-            </div>
-
-            {/* Summary & Live Profit Calculation */}
-            <div className="bg-slate-50 rounded-2xl p-3 border border-slate-200 space-y-1.5 text-xs">
-              <div className="flex justify-between items-center text-slate-600">
-                <span>تكلفة الشحن المخصومة من رصيد ماكينتك (فوري/أمان):</span>
-                <span className="font-mono font-bold">{(Number(rechargeCost) || 0).toFixed(2)} ج.م</span>
-              </div>
-              <div className="flex justify-between items-center text-emerald-700 font-bold">
-                <span>صافي ربح المكتبة في هذه العملية:</span>
-                <span className="font-mono font-black text-emerald-600">
-                  +{Math.max(0, (Number(rechargePrice) || 0) - (Number(rechargeCost) || 0)).toFixed(2)} ج.م
-                </span>
-              </div>
-              <div className="border-t border-slate-200 pt-1.5 flex justify-between items-center font-black text-sm text-slate-900">
-                <span>المبلغ المطلوب تحصيله كاش من العميل:</span>
-                <span className="text-base text-amber-600 font-black">
-                  {(Number(rechargePrice) || 0).toFixed(2)} ج.م
-                </span>
-              </div>
-            </div>
-
-            {/* Submit & Cancel Buttons */}
-            <div className="flex gap-2 pt-1">
+            {/* Service Tabs */}
+            <div className="grid grid-cols-2 gap-2 bg-slate-100 p-1.5 rounded-2xl">
               <button
-                type="submit"
-                disabled={!Number(rechargePrice) || Number(rechargePrice) <= 0}
-                className="flex-1 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 disabled:opacity-50 text-white font-black py-3 rounded-2xl shadow-lg shadow-orange-500/20 text-xs flex items-center justify-center gap-1.5 transition"
+                type="button"
+                onClick={() => setServiceModalTab('mobile')}
+                className={`py-2 px-3 rounded-xl font-black text-xs flex items-center justify-center gap-1.5 transition ${
+                  serviceModalTab === 'mobile'
+                    ? 'bg-amber-500 text-white shadow-md'
+                    : 'text-slate-600 hover:bg-slate-200'
+                }`}
               >
-                <Check className="w-4 h-4" />
-                إضافة الشحنة للفاتورة والدرج
+                <Zap className="w-4 h-4" />
+                شحن رصيد وكروت محمول
               </button>
               <button
                 type="button"
-                onClick={() => setRechargeModalOpen(false)}
-                className="bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold px-4 py-3 rounded-2xl text-xs transition"
+                onClick={() => setServiceModalTab('bills')}
+                className={`py-2 px-3 rounded-xl font-black text-xs flex items-center justify-center gap-1.5 transition ${
+                  serviceModalTab === 'bills'
+                    ? 'bg-teal-600 text-white shadow-md'
+                    : 'text-slate-600 hover:bg-slate-200'
+                }`}
               >
-                إلغاء
+                <Receipt className="w-4 h-4" />
+                سداد وشحن الفواتير
               </button>
             </div>
-          </form>
+
+            {serviceModalTab === 'mobile' ? (
+              /* TAB 1: MOBILE RECHARGE */
+              <form onSubmit={handleAddRecharge} className="space-y-4">
+                {/* Network Selector */}
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1.5">اختر شبكة المحمول:</label>
+                  <div className="grid grid-cols-4 gap-2">
+                    {[
+                      { id: 'vodafone', name: 'فودافون', en: 'Vodafone', activeBg: 'border-red-600 bg-red-50 text-red-700 ring-2 ring-red-500/30' },
+                      { id: 'orange', name: 'أورنج', en: 'Orange', activeBg: 'border-orange-500 bg-orange-50 text-orange-700 ring-2 ring-orange-500/30' },
+                      { id: 'etisalat', name: 'اتصالات', en: 'e& Etisalat', activeBg: 'border-emerald-600 bg-emerald-50 text-emerald-700 ring-2 ring-emerald-500/30' },
+                      { id: 'we', name: 'وي', en: 'WE Telecom', activeBg: 'border-purple-600 bg-purple-50 text-purple-700 ring-2 ring-purple-500/30' }
+                    ].map(net => (
+                      <button
+                        key={net.id}
+                        type="button"
+                        onClick={() => setTelecomCompany(net.id)}
+                        className={`p-2 rounded-2xl border-2 font-black text-xs flex flex-col items-center justify-center transition text-center ${
+                          telecomCompany === net.id
+                            ? net.activeBg
+                            : 'border-slate-200 bg-slate-50 text-slate-600 hover:bg-slate-100'
+                        }`}
+                      >
+                        <span className="text-sm font-black">{net.name}</span>
+                        <span className="text-[10px] text-slate-400 font-mono">{net.en}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Target Phone Number */}
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">
+                    رقم الهاتف المشحون له (اختياري للتوثيق بالفاتورة):
+                  </label>
+                  <input
+                    type="tel"
+                    value={rechargeTargetPhone}
+                    onChange={e => setRechargeTargetPhone(e.target.value)}
+                    placeholder="مثال: 01012345678 أو 011 / 012 / 015..."
+                    className="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm font-bold font-mono outline-none focus:border-amber-500"
+                  />
+                </div>
+
+                {/* Quick Presets for Egyptian Market */}
+                <div>
+                  <div className="flex items-center justify-between mb-1.5">
+                    <label className="text-xs font-bold text-slate-700">قوالب الشحن السريعة (الأسعار المعتمدة):</label>
+                    <span className="text-[10px] text-slate-400 font-bold">اضغط للاختيار السريع</span>
+                  </div>
+                  <div className="grid grid-cols-4 gap-1.5 text-xs">
+                    {[
+                      { label: 'كارت 10 بـ 15ج', bal: 10, price: 15, cost: 14.3 },
+                      { label: 'كارت 20 بـ 28.5ج', bal: 20, price: 28.5, cost: 27.2 },
+                      { label: 'كارت 25 بـ 35ج', bal: 25, price: 35, cost: 33.4 },
+                      { label: 'كارت 50 بـ 70ج', bal: 50, price: 70, cost: 67 },
+                      { label: 'كارت 100 بـ 140ج', bal: 100, price: 140, cost: 134 },
+                      { label: 'فكة 5 (بـ 7ج)', bal: 5, price: 7, cost: 6.5 },
+                      { label: 'فكة 7 (بـ 9.5ج)', bal: 7, price: 9.5, cost: 8.9 },
+                      { label: 'فكة 10 (بـ 13ج)', bal: 10, price: 13, cost: 12.2 }
+                    ].map((p, idx) => {
+                      const isSelected = Number(rechargePrice) === p.price && Number(rechargeAmount) === p.bal;
+                      return (
+                        <button
+                          key={idx}
+                          type="button"
+                          onClick={() => handleSelectRechargePreset(p.bal, p.price, p.cost)}
+                          className={`p-1.5 rounded-xl border text-center transition font-bold ${
+                            isSelected
+                              ? 'border-amber-500 bg-amber-50 text-amber-900 shadow-sm'
+                              : 'border-slate-200 bg-white hover:bg-slate-50 text-slate-700'
+                          }`}
+                        >
+                          <div className="text-[10px] leading-tight font-black">{p.label}</div>
+                          <div className="text-[9px] text-slate-400 mt-0.5">ربح: +{(p.price - p.cost).toFixed(1)}ج</div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* Custom Amounts */}
+                <div className="grid grid-cols-3 gap-2">
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                      الرصيد الصافي (ج):
+                    </label>
+                    <input
+                      type="number"
+                      min="1"
+                      step="any"
+                      value={rechargeAmount}
+                      onChange={e => setRechargeAmount(e.target.value)}
+                      placeholder="10"
+                      className="w-full rounded-xl border-2 border-slate-300 focus:border-amber-500 px-2 py-2 text-sm font-black text-slate-900 outline-none text-center"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] font-bold text-purple-700 mb-1">
+                      المطلوب من العميل (ج):
+                    </label>
+                    <input
+                      type="number"
+                      required
+                      min="1"
+                      step="any"
+                      value={rechargePrice}
+                      onChange={e => {
+                        const pr = e.target.value;
+                        setRechargePrice(pr);
+                        if (Number(pr) > 0 && (!rechargeCost || Number(rechargeCost) === 0)) {
+                          setRechargeCost(String((Number(pr) * 0.96).toFixed(2)));
+                        }
+                      }}
+                      placeholder="15"
+                      className="w-full rounded-xl border-2 border-purple-400 bg-purple-50/50 focus:border-purple-600 px-2 py-2 text-sm font-black text-purple-900 outline-none text-center"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-600 mb-1">
+                      التكلفة عالماكينة (ج):
+                    </label>
+                    <input
+                      type="number"
+                      min="0"
+                      step="any"
+                      value={rechargeCost}
+                      onChange={e => setRechargeCost(e.target.value)}
+                      placeholder="14.3"
+                      className="w-full rounded-xl border-2 border-slate-300 focus:border-slate-500 px-2 py-2 text-sm font-black text-slate-800 outline-none text-center"
+                    />
+                  </div>
+                </div>
+
+                {/* Summary & Live Profit Calculation */}
+                <div className="bg-slate-50 rounded-2xl p-3 border border-slate-200 space-y-1 text-xs">
+                  <div className="flex justify-between items-center text-slate-600">
+                    <span>تكلفة الشحن المخصومة من رصيد ماكينتك (فوري/أمان):</span>
+                    <span className="font-mono font-bold">{(Number(rechargeCost) || 0).toFixed(2)} ج.م</span>
+                  </div>
+                  <div className="flex justify-between items-center text-emerald-700 font-bold">
+                    <span>صافي ربح المكتبة في هذه العملية:</span>
+                    <span className="font-mono font-black text-emerald-600">
+                      +{Math.max(0, (Number(rechargePrice) || 0) - (Number(rechargeCost) || 0)).toFixed(2)} ج.م
+                    </span>
+                  </div>
+                  <div className="border-t border-slate-200 pt-1.5 flex justify-between items-center font-black text-sm text-slate-900">
+                    <span>المبلغ المطلوب تحصيله كاش من العميل:</span>
+                    <span className="text-base text-amber-600 font-black">
+                      {(Number(rechargePrice) || 0).toFixed(2)} ج.م
+                    </span>
+                  </div>
+                </div>
+
+                {/* Submit & Cancel Buttons */}
+                <div className="flex gap-2 pt-1">
+                  <button
+                    type="submit"
+                    disabled={!Number(rechargePrice) || Number(rechargePrice) <= 0}
+                    className="flex-1 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 disabled:opacity-50 text-white font-black py-3 rounded-2xl shadow-lg shadow-orange-500/20 text-xs flex items-center justify-center gap-1.5 transition"
+                  >
+                    <Check className="w-4 h-4" />
+                    إضافة الشحنة للفاتورة والدرج
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setRechargeModalOpen(false)}
+                    className="bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold px-4 py-3 rounded-2xl text-xs transition"
+                  >
+                    إلغاء
+                  </button>
+                </div>
+              </form>
+            ) : (
+              /* TAB 2: BILL PAYMENT (سداد وشحن الفواتير) */
+              <form onSubmit={handleAddBillPayment} className="space-y-4">
+                {/* Bill Service Category Selector */}
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1.5">اختر نوع الخدمة / الفاتورة:</label>
+                  <div className="grid grid-cols-3 gap-2">
+                    {[
+                      { id: 'electricity', name: 'كهرباء', icon: '⚡', desc: 'كارت ذكي / فاتورة', defaultProvider: 'شركة الكهرباء' },
+                      { id: 'water', name: 'مياه الشرب', icon: '💧', desc: 'فاتورة / كارت مياه', defaultProvider: 'شركة مياه الشرب والصرف' },
+                      { id: 'gas', name: 'غاز طبيعي', icon: '🔥', desc: 'بتروتريد / كارت غاز', defaultProvider: 'بتروتريد (Petrotrade)' },
+                      { id: 'landline_net', name: 'أرضي وإنترنت', icon: '🌐', desc: 'المصرية WE / DSL', defaultProvider: 'المصرية للاتصالات WE' },
+                      { id: 'education', name: 'مصاريف تعليم', icon: '🎓', desc: 'مدارس وجامعات', defaultProvider: 'مصاريف مدارس حكومية' },
+                      { id: 'other', name: 'خدمات أخرى', icon: '📋', desc: 'مرور / نقابات / أقساط', defaultProvider: 'خدمات سداد إلكتروني' }
+                    ].map(cat => (
+                      <button
+                        key={cat.id}
+                        type="button"
+                        onClick={() => {
+                          setBillType(cat.id);
+                          setBillProviderName(cat.defaultProvider);
+                        }}
+                        className={`p-2.5 rounded-2xl border-2 text-right transition flex flex-col justify-between ${
+                          billType === cat.id
+                            ? 'border-teal-600 bg-teal-50 text-teal-900 ring-2 ring-teal-500/30'
+                            : 'border-slate-200 bg-slate-50 text-slate-700 hover:bg-slate-100'
+                        }`}
+                      >
+                        <div className="flex items-center justify-between">
+                          <span className="font-black text-xs">{cat.name}</span>
+                          <span className="text-base">{cat.icon}</span>
+                        </div>
+                        <span className="text-[10px] text-slate-500 mt-1">{cat.desc}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Quick Provider Suggestions based on Category */}
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-600 mb-1">
+                    الجهة / الشركة / مزود الخدمة:
+                  </label>
+                  <div className="flex flex-wrap gap-1 mb-1.5">
+                    {billType === 'electricity' && [
+                      'شركة جنوب القاهرة', 'شركة شمال القاهرة', 'شركة القناة', 'شحن كارت كهرباء NFC'
+                    ].map(p => (
+                      <button
+                        key={p}
+                        type="button"
+                        onClick={() => setBillProviderName(p)}
+                        className={`text-[10px] px-2 py-0.5 rounded-lg border font-bold transition ${
+                          billProviderName === p
+                            ? 'bg-teal-600 text-white border-teal-600'
+                            : 'bg-slate-100 hover:bg-slate-200 text-slate-700 border-slate-200'
+                        }`}
+                      >
+                        {p}
+                      </button>
+                    ))}
+                    {billType === 'water' && [
+                      'شركة مياه الشرب والصرف', 'شحن كارت مياه مسبق الدفع'
+                    ].map(p => (
+                      <button
+                        key={p}
+                        type="button"
+                        onClick={() => setBillProviderName(p)}
+                        className={`text-[10px] px-2 py-0.5 rounded-lg border font-bold transition ${
+                          billProviderName === p
+                            ? 'bg-teal-600 text-white border-teal-600'
+                            : 'bg-slate-100 hover:bg-slate-200 text-slate-700 border-slate-200'
+                        }`}
+                      >
+                        {p}
+                      </button>
+                    ))}
+                    {billType === 'gas' && [
+                      'بتروتريد (Petrotrade)', 'غاز مصر (Egypt Gas)', 'تاون جاس (Town Gas)', 'شحن كارت غاز'
+                    ].map(p => (
+                      <button
+                        key={p}
+                        type="button"
+                        onClick={() => setBillProviderName(p)}
+                        className={`text-[10px] px-2 py-0.5 rounded-lg border font-bold transition ${
+                          billProviderName === p
+                            ? 'bg-teal-600 text-white border-teal-600'
+                            : 'bg-slate-100 hover:bg-slate-200 text-slate-700 border-slate-200'
+                        }`}
+                      >
+                        {p}
+                      </button>
+                    ))}
+                    {billType === 'landline_net' && [
+                      'المصرية للاتصالات WE (أرضي)', 'WE Space إنترنت منزلي', 'فودافون DSL', 'أورنج DSL', 'اتصالات DSL'
+                    ].map(p => (
+                      <button
+                        key={p}
+                        type="button"
+                        onClick={() => setBillProviderName(p)}
+                        className={`text-[10px] px-2 py-0.5 rounded-lg border font-bold transition ${
+                          billProviderName === p
+                            ? 'bg-teal-600 text-white border-teal-600'
+                            : 'bg-slate-100 hover:bg-slate-200 text-slate-700 border-slate-200'
+                        }`}
+                      >
+                        {p}
+                      </button>
+                    ))}
+                    {billType === 'education' && [
+                      'مصاريف مدارس حكومية', 'جامعة القاهرة', 'جامعة الأزهر', 'جامعة عين شمس', 'جامعة حلوان'
+                    ].map(p => (
+                      <button
+                        key={p}
+                        type="button"
+                        onClick={() => setBillProviderName(p)}
+                        className={`text-[10px] px-2 py-0.5 rounded-lg border font-bold transition ${
+                          billProviderName === p
+                            ? 'bg-teal-600 text-white border-teal-600'
+                            : 'bg-slate-100 hover:bg-slate-200 text-slate-700 border-slate-200'
+                        }`}
+                      >
+                        {p}
+                      </button>
+                    ))}
+                  </div>
+                  <input
+                    type="text"
+                    required
+                    value={billProviderName}
+                    onChange={e => setBillProviderName(e.target.value)}
+                    placeholder="اسم الشركة أو الجهة"
+                    className="w-full rounded-xl border border-slate-300 px-3 py-1.5 text-xs font-bold outline-none focus:border-teal-600"
+                  />
+                </div>
+
+                {/* Account / Meter / Payment Code */}
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">
+                    رقم المشترك / كود السداد / رقم العداد / التليفون الأرضي (اختياري للتوثيق):
+                  </label>
+                  <input
+                    type="text"
+                    value={billAccountNo}
+                    onChange={e => setBillAccountNo(e.target.value)}
+                    placeholder="مثال: 02XXXXXXXX أو كود السداد الإلكتروني أو رقم المشترك..."
+                    className="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm font-bold font-mono outline-none focus:border-teal-600"
+                  />
+                </div>
+
+                {/* Financial Amounts for Bill */}
+                <div className="grid grid-cols-3 gap-2">
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                      أصل الفاتورة (ج):
+                    </label>
+                    <input
+                      type="number"
+                      required
+                      min="1"
+                      step="any"
+                      autoFocus
+                      value={billAmount}
+                      onChange={e => setBillAmount(e.target.value)}
+                      placeholder="مثال: 150"
+                      className="w-full rounded-xl border-2 border-slate-300 focus:border-teal-600 px-2 py-2 text-sm font-black text-slate-900 outline-none text-center"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-600 mb-1">
+                      رسوم الماكينة (ج):
+                    </label>
+                    <input
+                      type="number"
+                      min="0"
+                      step="any"
+                      value={billMachineFee}
+                      onChange={e => setBillMachineFee(e.target.value)}
+                      placeholder="3"
+                      className="w-full rounded-xl border-2 border-slate-300 focus:border-slate-500 px-2 py-2 text-sm font-black text-slate-800 outline-none text-center"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] font-bold text-emerald-700 mb-1">
+                      عمولة وربح المكتبة (ج):
+                    </label>
+                    <input
+                      type="number"
+                      min="0"
+                      step="any"
+                      value={billStoreProfit}
+                      onChange={e => setBillStoreProfit(e.target.value)}
+                      placeholder="5"
+                      className="w-full rounded-xl border-2 border-emerald-400 bg-emerald-50/50 focus:border-emerald-600 px-2 py-2 text-sm font-black text-emerald-800 outline-none text-center"
+                    />
+                  </div>
+                </div>
+
+                {/* Quick Store Commission Buttons */}
+                <div className="flex items-center gap-1.5 text-xs">
+                  <span className="text-[10px] text-slate-500 font-bold">عمولة سريعة:</span>
+                  {[3, 5, 7, 10, 15, 20].map(fee => (
+                    <button
+                      key={fee}
+                      type="button"
+                      onClick={() => setBillStoreProfit(String(fee))}
+                      className={`px-2 py-0.5 rounded-lg border text-[11px] font-black transition ${
+                        Number(billStoreProfit) === fee
+                          ? 'bg-emerald-600 text-white border-emerald-600'
+                          : 'bg-white hover:bg-slate-50 text-slate-700 border-slate-200'
+                      }`}
+                    >
+                      {fee}ج
+                    </button>
+                  ))}
+                </div>
+
+                {/* Bill Financial Summary Box */}
+                <div className="bg-slate-50 rounded-2xl p-3 border border-slate-200 space-y-1 text-xs">
+                  <div className="flex justify-between items-center text-slate-600">
+                    <span>التكلفة المخصومة من رصيد ماكينتك (أصل الفاتورة + رسوم السيرفيس):</span>
+                    <span className="font-mono font-bold">
+                      {((Number(billAmount) || 0) + (Number(billMachineFee) || 0)).toFixed(2)} ج.م
+                    </span>
+                  </div>
+                  <div className="flex justify-between items-center text-emerald-700 font-bold">
+                    <span>صافي عمولة وربح المكتبة في هذه العملية:</span>
+                    <span className="font-mono font-black text-emerald-600">
+                      +{(Number(billStoreProfit) || 0).toFixed(2)} ج.م
+                    </span>
+                  </div>
+                  <div className="border-t border-slate-200 pt-1.5 flex justify-between items-center font-black text-sm text-slate-900">
+                    <span>إجمالي المبلغ المطلوب استلامه كاش من العميل:</span>
+                    <span className="text-base text-teal-700 font-black">
+                      {((Number(billAmount) || 0) + (Number(billMachineFee) || 0) + (Number(billStoreProfit) || 0)).toFixed(2)} ج.م
+                    </span>
+                  </div>
+                </div>
+
+                {/* Actions */}
+                <div className="flex gap-2 pt-1">
+                  <button
+                    type="submit"
+                    disabled={!Number(billAmount) || Number(billAmount) <= 0}
+                    className="flex-1 bg-gradient-to-r from-teal-600 to-emerald-600 hover:from-teal-700 hover:to-emerald-700 disabled:opacity-50 text-white font-black py-3 rounded-2xl shadow-lg shadow-teal-600/20 text-xs flex items-center justify-center gap-1.5 transition"
+                  >
+                    <Check className="w-4 h-4" />
+                    تأكيد سداد الفاتورة وإضافتها للحساب
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setRechargeModalOpen(false)}
+                    className="bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold px-4 py-3 rounded-2xl text-xs transition"
+                  >
+                    إلغاء
+                  </button>
+                </div>
+              </form>
+            )}
+          </div>
         </div>
       )}
 
