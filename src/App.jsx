@@ -765,7 +765,7 @@ export default function App() {
       setEnteredPin('');
       setPinError('');
     } else {
-      setPinError('كلمة المرور غير صحيحة! يرجى إدخال باسورد المدير العام Ahmed kharbosh');
+      setPinError('كلمة المرور غير صحيحة! يرجى إدخال رمز المرور الصحيح.');
       setEnteredPin('');
     }
   };
@@ -791,7 +791,7 @@ export default function App() {
         className="bg-emerald-600 hover:bg-emerald-700 text-white font-black px-6 py-3 rounded-2xl text-xs flex items-center justify-center gap-2 mx-auto shadow-lg shadow-emerald-600/30 transition active:scale-95"
       >
         <KeyRound className="w-4 h-4" />
-        إدخال كلمة المرور (6101994)
+        إدخال كلمة المرور
       </button>
     </div>
   );
@@ -915,6 +915,7 @@ export default function App() {
             onPrintReceipt={(sale) => setActiveReceiptSale(sale)}
             onSaveProduct={handleSaveProduct}
             onSaveCategory={handleSaveCategory}
+            onAddExpense={handleAddExpense}
           />
         )}
 
@@ -1038,7 +1039,7 @@ export default function App() {
                   type={showPin ? 'text' : 'password'}
                   inputMode="numeric"
                   autoFocus
-                  placeholder="أدخل الباسورد (6101994)"
+                  placeholder="أدخل رمز المرور السري"
                   value={enteredPin}
                   onChange={(e) => {
                     setEnteredPin(e.target.value);

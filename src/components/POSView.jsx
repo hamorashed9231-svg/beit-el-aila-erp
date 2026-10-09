@@ -2,7 +2,8 @@ import React, { useState, useRef, useEffect } from 'react';
 import {
   Search, Barcode, ShoppingCart, Trash2, Plus, Minus, Printer,
   PauseCircle, PlayCircle, RotateCcw, UserCheck, CreditCard,
-  Banknote, Smartphone, BookOpen, FileText, Sparkles, Check, AlertTriangle
+  Banknote, Smartphone, BookOpen, FileText, Sparkles, Check, AlertTriangle,
+  Lock, KeyRound, Eye, EyeOff, Unlock, ShieldCheck, Wallet
 } from 'lucide-react';
 import { generateNextId } from '../api.js';
 
@@ -13,8 +14,10 @@ export default function POSView({
   onReturnSale,
   onPrintReceipt,
   onSaveProduct,
-  onSaveCategory
+  onSaveCategory,
+  onAddExpense
 }) {
+  const MANAGER_PASSWORD = '6101994';
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('ALL');
   const [activeCatalogTab, setActiveCatalogTab] = useState('products'); // products | notes | history
@@ -23,7 +26,24 @@ export default function POSView({
   const [selectedCustomerId, setSelectedCustomerId] = useState('CUS-1');
   const [paymentMethod, setPaymentMethod] = useState('cash');
   const [discount, setDiscount] = useState(0);
+  const [isDiscountAuthorized, setIsDiscountAuthorized] = useState(false);
+  const [discountModalOpen, setDiscountModalOpen] = useState(false);
+  const [discountPinInput, setDiscountPinInput] = useState('');
+  const [discountPinError, setDiscountPinError] = useState('');
+  const [pendingDiscountValue, setPendingDiscountValue] = useState('');
+  const [showDiscountPin, setShowDiscountPin] = useState(false);
+  const [activePinTarget, setActivePinTarget] = useState('pin'); // 'pin' | 'amount'
   const [paidAmountInput, setPaidAmountInput] = useState('');
+
+  // Cash Drawer Collection (تحصيل الدرج)
+  const [drawerModalOpen, setDrawerModalOpen] = useState(false);
+  const [drawerPinVerified, setDrawerPinVerified] = useState(false);
+  const [drawerPinInput, setDrawerPinInput] = useState('');
+  const [drawerPinError, setDrawerPinError] = useState('');
+  const [showDrawerPin, setShowDrawerPin] = useState(false);
+  const [collectAmount, setCollectAmount] = useState('');
+  const [collectNotes, setCollectNotes] = useState('تحصيل وتوريد نقدية الدرج طرف المدير العام');
+  const [collectReceiptData, setCollectReceiptData] = useState(null);
   const [isWholesale, setIsWholesale] = useState(false);
   const [scannerToast, setScannerToast] = useState(null);
 
@@ -430,6 +450,7 @@ export default function POSView({
     ]);
     setCart([]);
     setDiscount(0);
+    setIsDiscountAuthorized(false);
     setPaidAmountInput('');
   };
 
@@ -439,6 +460,95 @@ export default function POSView({
     setCart(target.items);
     setSelectedCustomerId(target.customerId);
     setHeldCarts(prev => prev.filter(h => h.id !== holdId));
+  };
+
+  const openDiscountModal = () => {
+    setPendingDiscountValue(discount > 0 ? String(discount) : '');
+    setDiscountPinInput('');
+    setDiscountPinError('');
+    setShowDiscountPin(false);
+    setActivePinTarget('pin');
+    setDiscountModalOpen(true);
+  };
+
+  const handleAuthorizeDiscount = (e) => {
+    if (e) e.preventDefault();
+    if (discountPinInput.trim() === MANAGER_PASSWORD) {
+      const val = Math.max(0, Number(pendingDiscountValue) || 0);
+      setDiscount(val);
+      setIsDiscountAuthorized(true);
+      setDiscountModalOpen(false);
+      setDiscountPinInput('');
+      setDiscountPinError('');
+    } else {
+      setDiscountPinError('رمز المرور غير صحيح! يرجى إدخال رمز مرور المدير العام.');
+      setDiscountPinInput('');
+    }
+  };
+
+  const cashCollected = (state.sales || [])
+    .filter(s => s.status !== 'returned' && s.paymentMethod === 'cash')
+    .reduce((sum, s) => sum + (Number(s.paidAmount) || 0), 0);
+  const vodafoneCollected = (state.sales || [])
+    .filter(s => s.status !== 'returned' && s.paymentMethod === 'vodafone_cash')
+    .reduce((sum, s) => sum + (Number(s.paidAmount) || 0), 0);
+  const instapayCollected = (state.sales || [])
+    .filter(s => s.status !== 'returned' && s.paymentMethod === 'instapay')
+    .reduce((sum, s) => sum + (Number(s.paidAmount) || 0), 0);
+  const totalExpenses = (state.expenses || []).reduce((sum, e) => sum + (Number(e.amount) || 0), 0);
+  const netCashInDrawer = Math.max(0, cashCollected - totalExpenses);
+
+  const openDrawerModal = () => {
+    setDrawerPinInput('');
+    setDrawerPinError('');
+    setShowDrawerPin(false);
+    setDrawerPinVerified(false);
+    setCollectAmount('');
+    setCollectNotes('تحصيل وتوريد نقدية الدرج طرف المدير العام');
+    setCollectReceiptData(null);
+    setDrawerModalOpen(true);
+  };
+
+  const handleVerifyDrawerPin = (e) => {
+    if (e) e.preventDefault();
+    if (drawerPinInput.trim() === MANAGER_PASSWORD) {
+      setDrawerPinVerified(true);
+      setDrawerPinError('');
+      setDrawerPinInput('');
+    } else {
+      setDrawerPinError('رمز المرور غير صحيح! يرجى إدخال رمز مرور المدير العام.');
+      setDrawerPinInput('');
+    }
+  };
+
+  const handleConfirmDrawerCollection = async (e) => {
+    if (e) e.preventDefault();
+    const amount = Number(collectAmount);
+    if (!amount || amount <= 0) {
+      alert('يرجى إدخال مبلغ صحيح للتحصيل');
+      return;
+    }
+    const receipt = {
+      id: `COL-${Date.now().toString().slice(-6)}`,
+      date: new Date().toISOString(),
+      amount,
+      cashier: currentUser?.name || 'الكاشير',
+      manager: 'المدير العام Ahmed kharbosh',
+      notes: collectNotes || 'تحصيل وتوريد نقدية الدرج طرف المدير العام',
+      drawerBefore: netCashInDrawer,
+      drawerAfter: Math.max(0, netCashInDrawer - amount)
+    };
+    if (onAddExpense) {
+      await onAddExpense({
+        title: `تحصيل نقدية الدرج - ${amount} ج.م للمدير العام`,
+        category: 'تحصيل وتوريد نقدية للمدير العام',
+        amount,
+        paidBy: currentUser?.name || 'الكاشير',
+        recipient: 'المدير العام Ahmed kharbosh',
+        notes: collectNotes || 'تحصيل نقدية الدرج طرف المدير العام Ahmed kharbosh'
+      });
+    }
+    setCollectReceiptData(receipt);
   };
 
   const handleCheckout = () => {
@@ -473,6 +583,7 @@ export default function POSView({
     onCompleteSale(salePayload);
     setCart([]);
     setDiscount(0);
+    setIsDiscountAuthorized(false);
     setPaidAmountInput('');
     setPaymentMethod('cash');
   };
@@ -558,6 +669,16 @@ export default function POSView({
               >
                 <Printer className="w-4 h-4 text-emerald-600" />
                 + تصوير/طباعة سريعة
+              </button>
+              <button
+                type="button"
+                onClick={openDrawerModal}
+                className="px-3 py-2 rounded-xl text-xs font-black bg-slate-900 text-emerald-400 hover:bg-slate-800 border border-slate-700 flex items-center gap-1.5 shadow-sm transition"
+                title="تحصيل وجرد نقدية الدرج (يتطلب رمز مرور المدير العام)"
+              >
+                <Wallet className="w-4 h-4 text-emerald-400" />
+                <span>تحصيل الدرج</span>
+                <Lock className="w-3 h-3 text-amber-400" />
               </button>
               <button
                 type="button"
@@ -868,6 +989,16 @@ export default function POSView({
           </div>
           <div className="flex items-center gap-1.5">
             <button
+              type="button"
+              onClick={openDrawerModal}
+              title="تحصيل وجرد نقدية الدرج (يتطلب رمز مرور المدير العام)"
+              className="px-2 py-1.5 rounded-lg bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 text-xs font-bold flex items-center gap-1 transition"
+            >
+              <Wallet className="w-3.5 h-3.5" />
+              <span>الدرج</span>
+              <Lock className="w-2.5 h-2.5 text-amber-400" />
+            </button>
+            <button
               onClick={handleHoldCart}
               disabled={cart.length === 0}
               title="تعليق الفاتورة مؤقتاً (F4)"
@@ -877,7 +1008,11 @@ export default function POSView({
               تعليق (F4)
             </button>
             <button
-              onClick={() => setCart([])}
+              onClick={() => {
+                setCart([]);
+                setDiscount(0);
+                setIsDiscountAuthorized(false);
+              }}
               disabled={cart.length === 0}
               className="p-1.5 rounded-lg bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 disabled:opacity-40 transition"
               title="إفراغ السلة"
@@ -970,13 +1105,19 @@ export default function POSView({
                   {/* Unit Price & Total */}
                   <div className="text-left min-w-[75px]">
                     <div className="font-black text-xs text-emerald-700">{item.total.toFixed(2)} ج.م</div>
-                    <input
-                      type="number"
-                      value={item.unitPrice}
-                      onChange={e => updateCartItemCustomPrice(item.cartItemId, e.target.value)}
-                      className="w-16 text-[11px] text-left font-mono text-slate-500 border-b border-dashed border-slate-300 focus:border-emerald-600 outline-none bg-transparent"
-                      title="تعديل سعر الوحدة"
-                    />
+                    {isDiscountAuthorized ? (
+                      <input
+                        type="number"
+                        value={item.unitPrice}
+                        onChange={e => updateCartItemCustomPrice(item.cartItemId, e.target.value)}
+                        className="w-16 text-[11px] text-left font-mono text-emerald-700 border-b border-dashed border-emerald-500 focus:border-emerald-600 outline-none bg-transparent"
+                        title="تعديل سعر الوحدة (مصرح به من الإدارة)"
+                      />
+                    ) : (
+                      <div className="text-[11px] font-mono text-slate-500">
+                        {item.unitPrice} ج.م
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>
@@ -992,14 +1133,45 @@ export default function POSView({
               <span className="font-bold">{subtotal.toFixed(2)} ج</span>
             </div>
             <div className="flex items-center justify-between bg-white px-3 py-2 rounded-xl border border-slate-200">
-              <span className="text-slate-500 font-semibold">الخصم (ج.م):</span>
-              <input
-                type="number"
-                min="0"
-                value={discount}
-                onChange={e => setDiscount(e.target.value)}
-                className="w-16 text-left font-bold text-emerald-700 border-b border-slate-300 focus:border-emerald-600 outline-none"
-              />
+              <div className="flex items-center gap-1.5">
+                <span className="text-slate-500 font-semibold">الخصم (ج.م):</span>
+                {!isDiscountAuthorized && (
+                  <Lock className="w-3.5 h-3.5 text-amber-500" title="مغلق برمز مرور المدير العام" />
+                )}
+              </div>
+              {isDiscountAuthorized ? (
+                <div className="flex items-center gap-1">
+                  <input
+                    type="number"
+                    min="0"
+                    value={discount}
+                    onChange={e => setDiscount(Math.max(0, Number(e.target.value) || 0))}
+                    className="w-16 text-left font-bold text-emerald-700 border-b-2 border-emerald-500 focus:border-emerald-600 outline-none"
+                    autoFocus
+                  />
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setDiscount(0);
+                      setIsDiscountAuthorized(false);
+                    }}
+                    className="text-xs text-rose-500 hover:text-rose-700 font-black px-1"
+                    title="إلغاء الخصم وقفل الصلاحية"
+                  >
+                    ✕
+                  </button>
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  onClick={openDiscountModal}
+                  className="text-xs font-black text-emerald-700 hover:text-emerald-800 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 px-2.5 py-1 rounded-xl flex items-center gap-1 transition active:scale-95 shadow-sm"
+                  title="طلب إذن المدير العام لإضافة خصم"
+                >
+                  <KeyRound className="w-3.5 h-3.5" />
+                  <span>{discount > 0 ? `${discount} ج.م` : 'إضافة خصم'}</span>
+                </button>
+              )}
             </div>
           </div>
 
@@ -1408,6 +1580,435 @@ export default function POSView({
               </button>
             </div>
           </form>
+        </div>
+      )}
+
+      {/* 1. Manager Discount Authorization Modal */}
+      {discountModalOpen && (
+        <div className="fixed inset-0 z-50 bg-slate-900/80 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl shadow-2xl max-w-sm w-full p-6 border border-slate-200 text-center animate-in fade-in zoom-in-95 duration-200">
+            <div className="w-14 h-14 bg-gradient-to-tr from-emerald-600 to-teal-500 text-white rounded-2xl flex items-center justify-center mx-auto mb-3 shadow-lg shadow-emerald-600/30">
+              <KeyRound className="w-7 h-7" />
+            </div>
+
+            <h3 className="font-black text-lg text-slate-900">
+              إذن خصم على الفاتورة
+            </h3>
+            <p className="text-xs font-bold text-emerald-700 mt-0.5">
+              المدير العام Ahmed kharbosh
+            </p>
+            <p className="text-[11px] text-slate-500 mt-1 mb-4">
+              إضافة أو تعديل خصم يتطلب اعتماد رمز مرور المدير العام للموافقة
+            </p>
+
+            <form onSubmit={handleAuthorizeDiscount} className="space-y-3 text-right">
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">
+                  قيمة الخصم المطلوبة (ج.م):
+                </label>
+                <input
+                  type="number"
+                  min="0"
+                  step="any"
+                  placeholder="0.00"
+                  value={pendingDiscountValue}
+                  onFocus={() => setActivePinTarget('amount')}
+                  onChange={(e) => setPendingDiscountValue(e.target.value)}
+                  className="w-full rounded-2xl border-2 border-slate-300 bg-slate-50 px-4 py-2.5 text-center text-lg font-black text-slate-900 focus:border-emerald-600 focus:bg-white outline-none transition"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">
+                  رمز مرور المدير العام:
+                </label>
+                <div className="relative">
+                  <input
+                    type={showDiscountPin ? 'text' : 'password'}
+                    inputMode="numeric"
+                    autoFocus
+                    placeholder="أدخل رمز المرور السري"
+                    value={discountPinInput}
+                    onFocus={() => setActivePinTarget('pin')}
+                    onChange={(e) => {
+                      setDiscountPinInput(e.target.value);
+                      if (discountPinError) setDiscountPinError('');
+                    }}
+                    className={`w-full rounded-2xl border-2 px-4 py-2.5 text-center text-lg font-black tracking-widest outline-none transition ${
+                      discountPinError
+                        ? 'border-rose-500 bg-rose-50/50 text-rose-700 focus:border-rose-600'
+                        : 'border-slate-300 bg-slate-50 focus:border-emerald-600 focus:bg-white text-slate-900'
+                    }`}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowDiscountPin(!showDiscountPin)}
+                    className="absolute left-3 top-1/2 -translate-y-1/2 p-1.5 text-slate-400 hover:text-slate-700"
+                    title={showDiscountPin ? 'إخفاء' : 'إظهار'}
+                  >
+                    {showDiscountPin ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
+                </div>
+              </div>
+
+              {discountPinError && (
+                <div className="bg-rose-100 border border-rose-300 text-rose-700 px-3 py-2 rounded-xl text-xs font-bold text-center">
+                  {discountPinError}
+                </div>
+              )}
+
+              {/* Quick Touch Keypad */}
+              <div className="grid grid-cols-3 gap-1.5 pt-1">
+                {[1, 2, 3, 4, 5, 6, 7, 8, 9].map((num) => (
+                  <button
+                    key={num}
+                    type="button"
+                    onClick={() => {
+                      if (activePinTarget === 'amount') {
+                        setPendingDiscountValue(prev => prev + String(num));
+                      } else {
+                        setDiscountPinInput(prev => prev + String(num));
+                        if (discountPinError) setDiscountPinError('');
+                      }
+                    }}
+                    className="py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 font-black text-sm active:scale-95 transition"
+                  >
+                    {num}
+                  </button>
+                ))}
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (activePinTarget === 'amount') {
+                      setPendingDiscountValue('');
+                    } else {
+                      setDiscountPinInput('');
+                    }
+                  }}
+                  className="py-2 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-600 font-bold text-xs active:scale-95 transition"
+                >
+                  مسح
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (activePinTarget === 'amount') {
+                      setPendingDiscountValue(prev => prev + '0');
+                    } else {
+                      setDiscountPinInput(prev => prev + '0');
+                      if (discountPinError) setDiscountPinError('');
+                    }
+                  }}
+                  className="py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 font-black text-sm active:scale-95 transition"
+                >
+                  0
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (activePinTarget === 'amount') {
+                      setPendingDiscountValue(prev => prev.slice(0, -1));
+                    } else {
+                      setDiscountPinInput(prev => prev.slice(0, -1));
+                    }
+                  }}
+                  className="py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold text-xs active:scale-95 transition"
+                >
+                  ⌫
+                </button>
+              </div>
+
+              <div className="flex gap-2 pt-2">
+                <button
+                  type="submit"
+                  className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white font-black py-3 rounded-2xl shadow-lg shadow-emerald-600/30 transition text-sm flex items-center justify-center gap-1.5 active:scale-95"
+                >
+                  <Unlock className="w-4 h-4" />
+                  <span>اعتماد الخصم</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setDiscountModalOpen(false);
+                    setDiscountPinInput('');
+                    setDiscountPinError('');
+                  }}
+                  className="bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold px-4 py-3 rounded-2xl transition text-xs"
+                >
+                  إلغاء
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* 2. Cash Drawer Collection Modal (تحصيل الدرج) */}
+      {drawerModalOpen && (
+        <div className="fixed inset-0 z-50 bg-slate-900/80 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl shadow-2xl max-w-md w-full p-6 border border-slate-200 text-center animate-in fade-in zoom-in-95 duration-200">
+            {collectReceiptData ? (
+              <div className="space-y-4">
+                <div className="w-16 h-16 bg-emerald-100 text-emerald-600 rounded-2xl flex items-center justify-center mx-auto shadow-md">
+                  <Check className="w-8 h-8" />
+                </div>
+                <h3 className="font-black text-lg text-slate-900">
+                  تم تسجيل تحصيل وتوريد النقدية بنجاح ✓
+                </h3>
+                <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200 text-right text-xs space-y-2">
+                  <div className="flex justify-between border-b pb-1.5">
+                    <span className="text-slate-500 font-bold">رقم إيصال التحصيل:</span>
+                    <span className="font-mono font-black">{collectReceiptData.id}</span>
+                  </div>
+                  <div className="flex justify-between border-b pb-1.5">
+                    <span className="text-slate-500 font-bold">المبلغ المحصل / المورّد:</span>
+                    <span className="font-black text-emerald-700 text-base">{collectReceiptData.amount.toFixed(2)} ج.م</span>
+                  </div>
+                  <div className="flex justify-between border-b pb-1.5">
+                    <span className="text-slate-500 font-bold">المستلم:</span>
+                    <span className="font-bold text-slate-900">{collectReceiptData.manager}</span>
+                  </div>
+                  <div className="flex justify-between border-b pb-1.5">
+                    <span className="text-slate-500 font-bold">الكاشير المسلّم:</span>
+                    <span className="font-bold">{collectReceiptData.cashier}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-slate-500 font-bold">المتبقي بالدرج بعد السحب:</span>
+                    <span className="font-black text-slate-900">{collectReceiptData.drawerAfter.toFixed(2)} ج.م</span>
+                  </div>
+                </div>
+
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => window.print()}
+                    className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white font-black py-3 rounded-2xl shadow flex items-center justify-center gap-1.5 text-xs transition"
+                  >
+                    <Printer className="w-4 h-4" />
+                    طباعة إيصال استلام النقدية
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setDrawerModalOpen(false);
+                      setCollectReceiptData(null);
+                    }}
+                    className="bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold px-5 py-3 rounded-2xl text-xs transition"
+                  >
+                    إغلاق
+                  </button>
+                </div>
+              </div>
+            ) : !drawerPinVerified ? (
+              <div>
+                <div className="w-14 h-14 bg-gradient-to-tr from-emerald-600 to-teal-500 text-white rounded-2xl flex items-center justify-center mx-auto mb-3 shadow-lg shadow-emerald-600/30">
+                  <Wallet className="w-7 h-7" />
+                </div>
+                <h3 className="font-black text-lg text-slate-900">
+                  تحصيل وجرد نقدية الدرج
+                </h3>
+                <p className="text-xs font-bold text-emerald-700 mt-0.5">
+                  المدير العام Ahmed kharbosh
+                </p>
+                <p className="text-[11px] text-slate-500 mt-1 mb-4">
+                  تحصيل أو سحب نقدية الدرج يتطلب اعتماد رمز مرور المدير العام للموافقة
+                </p>
+
+                <form onSubmit={handleVerifyDrawerPin} className="space-y-3">
+                  <div className="relative">
+                    <input
+                      type={showDrawerPin ? 'text' : 'password'}
+                      inputMode="numeric"
+                      autoFocus
+                      placeholder="أدخل رمز المرور السري"
+                      value={drawerPinInput}
+                      onChange={(e) => {
+                        setDrawerPinInput(e.target.value);
+                        if (drawerPinError) setDrawerPinError('');
+                      }}
+                      className={`w-full rounded-2xl border-2 px-4 py-2.5 text-center text-lg font-black tracking-widest outline-none transition ${
+                        drawerPinError
+                          ? 'border-rose-500 bg-rose-50/50 text-rose-700 focus:border-rose-600'
+                          : 'border-slate-300 bg-slate-50 focus:border-emerald-600 focus:bg-white text-slate-900'
+                      }`}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowDrawerPin(!showDrawerPin)}
+                      className="absolute left-3 top-1/2 -translate-y-1/2 p-1.5 text-slate-400 hover:text-slate-700"
+                      title={showDrawerPin ? 'إخفاء' : 'إظهار'}
+                    >
+                      {showDrawerPin ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                    </button>
+                  </div>
+
+                  {drawerPinError && (
+                    <div className="bg-rose-100 border border-rose-300 text-rose-700 px-3 py-2 rounded-xl text-xs font-bold text-center">
+                      {drawerPinError}
+                    </div>
+                  )}
+
+                  {/* Keypad */}
+                  <div className="grid grid-cols-3 gap-1.5 pt-1">
+                    {[1, 2, 3, 4, 5, 6, 7, 8, 9].map((num) => (
+                      <button
+                        key={num}
+                        type="button"
+                        onClick={() => {
+                          setDrawerPinInput(prev => prev + String(num));
+                          if (drawerPinError) setDrawerPinError('');
+                        }}
+                        className="py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 font-black text-sm active:scale-95 transition"
+                      >
+                        {num}
+                      </button>
+                    ))}
+                    <button
+                      type="button"
+                      onClick={() => setDrawerPinInput('')}
+                      className="py-2 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-600 font-bold text-xs active:scale-95 transition"
+                    >
+                      مسح
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setDrawerPinInput(prev => prev + '0');
+                        if (drawerPinError) setDrawerPinError('');
+                      }}
+                      className="py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 font-black text-sm active:scale-95 transition"
+                    >
+                      0
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setDrawerPinInput(prev => prev.slice(0, -1))}
+                      className="py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold text-xs active:scale-95 transition"
+                    >
+                      ⌫
+                    </button>
+                  </div>
+
+                  <div className="flex gap-2 pt-2">
+                    <button
+                      type="submit"
+                      className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white font-black py-3 rounded-2xl shadow-lg shadow-emerald-600/30 transition text-sm flex items-center justify-center gap-1.5 active:scale-95"
+                    >
+                      <Unlock className="w-4 h-4" />
+                      <span>فتح تحصيل الدرج</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setDrawerModalOpen(false)}
+                      className="bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold px-4 py-3 rounded-2xl transition text-xs"
+                    >
+                      إلغاء
+                    </button>
+                  </div>
+                </form>
+              </div>
+            ) : (
+              <div className="space-y-4 text-right">
+                <div className="flex items-center justify-between border-b pb-3">
+                  <div className="flex items-center gap-2">
+                    <div className="p-2 rounded-xl bg-emerald-100 text-emerald-700">
+                      <Wallet className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <h3 className="font-black text-base text-slate-900">جرد وتحصيل نقدية الدرج</h3>
+                      <p className="text-[11px] text-emerald-700 font-bold">مصرح به: المدير العام Ahmed kharbosh</p>
+                    </div>
+                  </div>
+                  <span className="text-xs bg-slate-100 px-2.5 py-1 rounded-lg font-bold text-slate-600">
+                    الكاشير: {currentUser?.name}
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-2 gap-2 text-xs">
+                  <div className="bg-slate-900 text-white p-3 rounded-2xl col-span-2 flex items-center justify-between shadow-inner">
+                    <div>
+                      <span className="text-[11px] text-emerald-400 block font-bold">صافي الكاش الفعلي بالدرج الآن</span>
+                      <span className="text-2xl font-black text-white">{netCashInDrawer.toFixed(2)} ج.م</span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setCollectAmount(String(netCashInDrawer))}
+                      className="bg-emerald-600 hover:bg-emerald-500 text-white font-black px-3 py-1.5 rounded-xl text-xs transition"
+                    >
+                      تحصيل كامل الدرج
+                    </button>
+                  </div>
+
+                  <div className="bg-emerald-50 p-2.5 rounded-xl border border-emerald-200">
+                    <span className="text-slate-500 block font-semibold text-[10px]">مبيعات نقدية كاش:</span>
+                    <span className="font-black text-emerald-800 text-sm">{cashCollected.toFixed(2)} ج.م</span>
+                  </div>
+                  <div className="bg-rose-50 p-2.5 rounded-xl border border-rose-200">
+                    <span className="text-slate-500 block font-semibold text-[10px]">مسحوبات ومصروفات سابقة:</span>
+                    <span className="font-black text-rose-700 text-sm">{totalExpenses.toFixed(2)} ج.م</span>
+                  </div>
+
+                  <div className="bg-purple-50 p-2.5 rounded-xl border border-purple-200">
+                    <span className="text-slate-500 block font-semibold text-[10px]">فودافون كاش:</span>
+                    <span className="font-black text-purple-700 text-sm">{vodafoneCollected.toFixed(2)} ج.م</span>
+                  </div>
+                  <div className="bg-blue-50 p-2.5 rounded-xl border border-blue-200">
+                    <span className="text-slate-500 block font-semibold text-[10px]">إنستا باي:</span>
+                    <span className="font-black text-blue-700 text-sm">{instapayCollected.toFixed(2)} ج.م</span>
+                  </div>
+                </div>
+
+                <form onSubmit={handleConfirmDrawerCollection} className="space-y-3 pt-1">
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">
+                      المبلغ المراد تحصيله / سحبه للمدير (ج.م):
+                    </label>
+                    <input
+                      type="number"
+                      required
+                      min="1"
+                      max={netCashInDrawer > 0 ? netCashInDrawer : undefined}
+                      step="any"
+                      placeholder={`أقصى كاش متاح: ${netCashInDrawer.toFixed(2)}`}
+                      value={collectAmount}
+                      onChange={(e) => setCollectAmount(e.target.value)}
+                      className="w-full rounded-xl border-2 border-slate-300 px-3 py-2 text-center text-lg font-black text-slate-900 focus:border-emerald-600 outline-none"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">
+                      البيان / ملاحظات التوريد:
+                    </label>
+                    <input
+                      type="text"
+                      value={collectNotes}
+                      onChange={(e) => setCollectNotes(e.target.value)}
+                      className="w-full rounded-xl border border-slate-300 px-3 py-2 text-xs font-bold text-slate-800"
+                    />
+                  </div>
+
+                  <div className="flex gap-2 pt-2">
+                    <button
+                      type="submit"
+                      disabled={!Number(collectAmount) || Number(collectAmount) <= 0}
+                      className="flex-1 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white font-black py-3 rounded-2xl shadow-lg shadow-emerald-600/30 transition text-sm flex items-center justify-center gap-1.5"
+                    >
+                      <Check className="w-4 h-4" />
+                      <span>تأكيد سحب وتحصيل المبلغ</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setDrawerModalOpen(false)}
+                      className="bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold px-4 py-3 rounded-2xl transition text-xs"
+                    >
+                      إلغاء
+                    </button>
+                  </div>
+                </form>
+              </div>
+            )}
+          </div>
         </div>
       )}
     </div>
