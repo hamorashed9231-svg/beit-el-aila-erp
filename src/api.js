@@ -60,6 +60,15 @@ export function normalizeState(parsed) {
   parsed.products = parsed.products.filter(p => !DUMMY_BARCODES.has(p.barcode));
   parsed.studyNotes = parsed.studyNotes.filter(n => !DUMMY_NOTE_CODES.has(n.code));
 
+  // Fix bogus default wholesalePrice values (e.g. wholesalePrice stuck at default 9)
+  parsed.products.forEach(p => {
+    if (p.wholesalePrice === 9 && p.sellPrice !== 10) {
+      p.wholesalePrice = p.sellPrice;
+    } else if (p.wholesalePrice && p.wholesalePrice >= p.sellPrice) {
+      p.wholesalePrice = p.sellPrice;
+    }
+  });
+
   if (!Array.isArray(parsed.users) || parsed.users.length === 0) {
     parsed.users = structuredClone(initialDatabase.users);
   } else {

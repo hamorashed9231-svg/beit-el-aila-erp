@@ -1,8 +1,40 @@
 import React, { useState } from 'react';
 import {
   Package, Plus, Search, AlertTriangle, Edit3, Trash2, Barcode,
-  Truck, Layers, CheckCircle2, Globe, DollarSign, Archive, Box
+  Truck, Layers, CheckCircle2, Globe, DollarSign, Archive, Box,
+  Upload, Camera, Image as ImageIcon
 } from 'lucide-react';
+
+function compressImageFile(file, maxWidth = 600, maxHeight = 600, quality = 0.8) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = reject;
+    reader.onload = (e) => {
+      const img = new Image();
+      img.onerror = reject;
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        let { width, height } = img;
+        if (width > maxWidth || height > maxHeight) {
+          if (width > height) {
+            height = Math.round((height * maxWidth) / width);
+            width = maxWidth;
+          } else {
+            width = Math.round((width * maxHeight) / height);
+            height = maxHeight;
+          }
+        }
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(img, 0, 0, width, height);
+        resolve(canvas.toDataURL('image/jpeg', quality));
+      };
+      img.src = e.target.result;
+    };
+    reader.readAsDataURL(file);
+  });
+}
 
 export default function InventoryView({
   state,
@@ -73,7 +105,7 @@ export default function InventoryView({
       category: selectedCategory !== 'ALL' ? selectedCategory : (state.categories[0]?.id || 'GENERAL'),
       costPrice: defPieceCost,
       sellPrice: defPieceSell,
-      wholesalePrice: defPieceSell - 1,
+      wholesalePrice: defPieceSell,
       stock: defCartons * defPiecesPerCarton,
       minStock: defPiecesPerCarton,
       baseUnit: isSnackOrCarton ? 'كيس / قطعة' : 'قطعة',
@@ -440,7 +472,9 @@ export default function InventoryView({
                     </td>
                     <td className="py-3 px-3 text-center">
                       <div className="font-black text-emerald-700 text-sm">{prod.sellPrice} ج.م</div>
-                      <div className="text-[11px] text-amber-700 font-bold">جملة: {prod.wholesalePrice || prod.sellPrice} ج</div>
+                      {prod.wholesalePrice && Number(prod.wholesalePrice) < Number(prod.sellPrice) ? (
+                        <div className="text-[11px] text-amber-700 font-bold">جملة: {prod.wholesalePrice} ج</div>
+                      ) : null}
                     </td>
                     <td className="py-3 px-3">
                       <div className="flex flex-wrap gap-1">
@@ -808,14 +842,25 @@ export default function InventoryView({
                 />
               </div>
 
-              <div className="sm:col-span-2">
-                <label className="block font-bold text-slate-700 mb-1">رابط صورة المنتج (أو اتركه للصورة الافتراضية)</label>
+              <div>
+                <label className="block font-bold text-slate-700 mb-1">
+                  سعر بيع الجملة (اختياري)
+                </label>
                 <input
-                  type="text"
-                  value={editingProduct.image}
-                  onChange={e => setEditingProduct({ ...editingProduct, image: e.target.value })}
-                  className="w-full rounded-xl border border-slate-300 px-3 py-2 font-mono text-[11px]"
+                  type="number"
+                  step="0.25"
+                  placeholder="نفس سعر البيع العادي"
+                  value={editingProduct.wholesalePrice && editingProduct.wholesalePrice < editingProduct.sellPrice ? editingProduct.wholesalePrice : ''}
+                  onChange={e => {
+                    const val = Number(e.target.value);
+                    setEditingProduct({
+                      ...editingProduct,
+                      wholesalePrice: val > 0 ? val : editingProduct.sellPrice
+                    });
+                  }}
+                  className="w-full rounded-xl border border-slate-300 px-3 py-2 font-bold"
                 />
+                <span className="text-[10px] text-slate-400">اتركه فارغاً إذا كان الصنف قطاعي فقط</span>
               </div>
 
               <div className="flex items-center gap-3 pt-5">
@@ -828,6 +873,69 @@ export default function InventoryView({
                   />
                   عرض في المتجر الإلكتروني
                 </label>
+              </div>
+
+              {/* Photo Upload from Device or URL */}
+              <div className="sm:col-span-3 bg-slate-50 p-4 rounded-2xl border border-slate-200">
+                <label className="block font-black text-slate-900 mb-2">صورة المنتج (من الجهاز أو رابط)</label>
+                <div className="flex flex-wrap items-center gap-4">
+                  {editingProduct.image ? (
+                    <div className="relative w-20 h-20 rounded-2xl overflow-hidden border-2 border-slate-200 bg-white shrink-0 shadow-sm">
+                      <img src={editingProduct.image} alt="معاينة" className="w-full h-full object-cover" />
+                    </div>
+                  ) : (
+                    <div className="w-20 h-20 rounded-2xl border-2 border-dashed border-slate-300 bg-white flex flex-col items-center justify-center text-slate-400 shrink-0">
+                      <ImageIcon className="w-6 h-6 stroke-1" />
+                      <span className="text-[10px] font-bold mt-1">لا توجد صورة</span>
+                    </div>
+                  )}
+
+                  <div className="flex-1 space-y-2">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <label className="cursor-pointer inline-flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white font-black px-4 py-2.5 rounded-xl text-xs shadow transition active:scale-95">
+                        <Upload className="w-4 h-4" />
+                        <span>اختيار صورة من الجهاز أو الموبايل</span>
+                        <input
+                          type="file"
+                          accept="image/*"
+                          className="hidden"
+                          onChange={async (e) => {
+                            const file = e.target.files?.[0];
+                            if (!file) return;
+                            try {
+                              const compressed = await compressImageFile(file);
+                              setEditingProduct(prev => ({ ...prev, image: compressed }));
+                            } catch (err) {
+                              console.error('Image compression failed', err);
+                            }
+                          }}
+                        />
+                      </label>
+
+                      {editingProduct.image && (
+                        <button
+                          type="button"
+                          onClick={() => setEditingProduct({ ...editingProduct, image: '' })}
+                          className="text-rose-600 hover:text-rose-700 text-xs font-bold px-3 py-2 rounded-xl bg-rose-50 hover:bg-rose-100 transition border border-rose-200"
+                        >
+                          حذف الصورة
+                        </button>
+                      )}
+                    </div>
+
+                    <input
+                      type="text"
+                      placeholder="أو الصق رابط صورة من الإنترنت..."
+                      value={editingProduct.image?.startsWith('data:') ? 'تم تحميل الصورة من الجهاز بنجاح ✓' : editingProduct.image || ''}
+                      onChange={e => {
+                        if (!e.target.value.startsWith('تم تحميل')) {
+                          setEditingProduct({ ...editingProduct, image: e.target.value });
+                        }
+                      }}
+                      className="w-full rounded-xl border border-slate-300 px-3 py-1.5 font-mono text-[11px] bg-white outline-none"
+                    />
+                  </div>
+                </div>
               </div>
             </div>
 

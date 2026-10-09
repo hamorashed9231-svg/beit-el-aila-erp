@@ -15,7 +15,8 @@ export default function POSView({
   onPrintReceipt,
   onSaveProduct,
   onSaveCategory,
-  onAddExpense
+  onAddExpense,
+  onSaveSettings
 }) {
   const MANAGER_PASSWORD = '6101994';
   const [searchQuery, setSearchQuery] = useState('');
@@ -369,7 +370,7 @@ export default function POSView({
       category: qaCategory,
       costPrice: pieceCost,
       sellPrice: pieceSell,
-      wholesalePrice: Math.max(pieceCost, pieceSell - 1),
+      wholesalePrice: pieceSell,
       stock: totalStock,
       minStock: ppc > 1 ? ppc : 10,
       baseUnit: qaBaseUnit || 'قطعة',
@@ -496,7 +497,20 @@ export default function POSView({
     .filter(s => s.status !== 'returned' && s.paymentMethod === 'instapay')
     .reduce((sum, s) => sum + (Number(s.paidAmount) || 0), 0);
   const totalExpenses = (state.expenses || []).reduce((sum, e) => sum + (Number(e.amount) || 0), 0);
-  const netCashInDrawer = Math.max(0, cashCollected - totalExpenses);
+  const openingShiftCash = Number(state.settings?.drawerOpeningCash ?? state.shifts?.[0]?.openingCash ?? 0);
+  const netCashInDrawer = Math.max(0, openingShiftCash + cashCollected - totalExpenses);
+  const netSalesRevenueCash = Math.max(0, cashCollected - totalExpenses);
+
+  const [isEditingOpeningCash, setIsEditingOpeningCash] = useState(false);
+  const [tempOpeningCash, setTempOpeningCash] = useState('');
+
+  const handleSaveOpeningCash = async () => {
+    const val = Math.max(0, Number(tempOpeningCash) || 0);
+    if (onSaveSettings) {
+      await onSaveSettings({ drawerOpeningCash: val });
+    }
+    setIsEditingOpeningCash(false);
+  };
 
   const openDrawerModal = () => {
     setDrawerPinInput('');
@@ -506,6 +520,8 @@ export default function POSView({
     setCollectAmount('');
     setCollectNotes('تحصيل وتوريد نقدية الدرج طرف المدير العام');
     setCollectReceiptData(null);
+    setTempOpeningCash(String(openingShiftCash));
+    setIsEditingOpeningCash(false);
     setDrawerModalOpen(true);
   };
 
@@ -1925,27 +1941,92 @@ export default function POSView({
                 </div>
 
                 <div className="grid grid-cols-2 gap-2 text-xs">
-                  <div className="bg-slate-900 text-white p-3 rounded-2xl col-span-2 flex items-center justify-between shadow-inner">
-                    <div>
-                      <span className="text-[11px] text-emerald-400 block font-bold">صافي الكاش الفعلي بالدرج الآن</span>
-                      <span className="text-2xl font-black text-white">{netCashInDrawer.toFixed(2)} ج.م</span>
+                  {/* Big Drawer Balance Card */}
+                  <div className="bg-slate-900 text-white p-3.5 rounded-2xl col-span-2 shadow-inner space-y-2">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <span className="text-[11px] text-emerald-400 block font-bold">صافي الكاش الفعلي المطلوب بالدرج الآن</span>
+                        <span className="text-2xl font-black text-white">{netCashInDrawer.toFixed(2)} ج.م</span>
+                      </div>
+                      <div className="flex flex-col gap-1.5 items-end">
+                        <button
+                          type="button"
+                          onClick={() => setCollectAmount(String(netSalesRevenueCash))}
+                          className="bg-emerald-600 hover:bg-emerald-500 text-white font-black px-3 py-1.5 rounded-xl text-xs transition active:scale-95 shadow"
+                          title="سحب إيراد المبيعات فقط وترك فكة البداية في الدرج"
+                        >
+                          سحب إيراد المبيعات ({netSalesRevenueCash.toFixed(2)} ج)
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setCollectAmount(String(netCashInDrawer))}
+                          className="bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 font-bold px-3 py-1 rounded-xl text-[11px] transition active:scale-95"
+                          title="سحب كامل المبلغ بما فيه الفكة"
+                        >
+                          تحصيل كامل الدرج بالفكة ({netCashInDrawer.toFixed(2)} ج)
+                        </button>
+                      </div>
                     </div>
-                    <button
-                      type="button"
-                      onClick={() => setCollectAmount(String(netCashInDrawer))}
-                      className="bg-emerald-600 hover:bg-emerald-500 text-white font-black px-3 py-1.5 rounded-xl text-xs transition"
-                    >
-                      تحصيل كامل الدرج
-                    </button>
+                    <div className="text-[10px] text-slate-400 bg-slate-800/80 px-2.5 py-1 rounded-lg flex items-center justify-between">
+                      <span>حسبة الدرج: عهدة بداية ({openingShiftCash} ج) + مبيعات كاش ({cashCollected} ج) - مسحوبات ({totalExpenses} ج)</span>
+                    </div>
+                  </div>
+
+                  {/* Opening Shift Float Card with edit option */}
+                  <div className="bg-amber-50 p-2.5 rounded-xl border border-amber-200 col-span-2 flex items-center justify-between">
+                    <div>
+                      <span className="text-amber-900 block font-bold text-xs">عهدّة بداية الدرج (الفكة الافتتاحية للوردية):</span>
+                      <span className="text-amber-800 text-[10px]">المبلغ الذي بدأ به الكاشير الوردية كفكة</span>
+                    </div>
+                    {isEditingOpeningCash ? (
+                      <div className="flex items-center gap-1.5">
+                        <input
+                          type="number"
+                          min="0"
+                          value={tempOpeningCash}
+                          onChange={(e) => setTempOpeningCash(e.target.value)}
+                          className="w-20 rounded-lg border border-amber-400 px-2 py-1 text-center font-black text-xs outline-none bg-white"
+                          autoFocus
+                        />
+                        <button
+                          type="button"
+                          onClick={handleSaveOpeningCash}
+                          className="bg-amber-600 text-white font-bold text-[11px] px-2.5 py-1 rounded-lg hover:bg-amber-700 transition"
+                        >
+                          حفظ
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setIsEditingOpeningCash(false)}
+                          className="text-slate-500 font-bold text-xs px-1"
+                        >
+                          ✕
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="flex items-center gap-2">
+                        <span className="font-black text-amber-900 text-sm">{openingShiftCash.toFixed(2)} ج.م</span>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setTempOpeningCash(String(openingShiftCash));
+                            setIsEditingOpeningCash(true);
+                          }}
+                          className="text-[10px] bg-amber-200/80 hover:bg-amber-300 text-amber-900 font-bold px-2 py-0.5 rounded-md transition"
+                        >
+                          تعديل الفكة
+                        </button>
+                      </div>
+                    )}
                   </div>
 
                   <div className="bg-emerald-50 p-2.5 rounded-xl border border-emerald-200">
                     <span className="text-slate-500 block font-semibold text-[10px]">مبيعات نقدية كاش:</span>
-                    <span className="font-black text-emerald-800 text-sm">{cashCollected.toFixed(2)} ج.م</span>
+                    <span className="font-black text-emerald-800 text-sm">+{cashCollected.toFixed(2)} ج.م</span>
                   </div>
                   <div className="bg-rose-50 p-2.5 rounded-xl border border-rose-200">
                     <span className="text-slate-500 block font-semibold text-[10px]">مسحوبات ومصروفات سابقة:</span>
-                    <span className="font-black text-rose-700 text-sm">{totalExpenses.toFixed(2)} ج.م</span>
+                    <span className="font-black text-rose-700 text-sm">-{totalExpenses.toFixed(2)} ج.م</span>
                   </div>
 
                   <div className="bg-purple-50 p-2.5 rounded-xl border border-purple-200">

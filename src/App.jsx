@@ -916,6 +916,7 @@ export default function App() {
             onSaveProduct={handleSaveProduct}
             onSaveCategory={handleSaveCategory}
             onAddExpense={handleAddExpense}
+            onSaveSettings={handleSaveSettings}
           />
         )}
 
