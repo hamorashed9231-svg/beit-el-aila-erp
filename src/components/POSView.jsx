@@ -16,9 +16,15 @@ export default function POSView({
   onSaveProduct,
   onSaveCategory,
   onAddExpense,
-  onSaveSettings
+  onSaveSettings,
+  onSwitchUser
 }) {
   const MANAGER_PASSWORD = '6101994';
+  const [shiftSwitchModalOpen, setShiftSwitchModalOpen] = useState(false);
+  const [selectedShiftUser, setSelectedShiftUser] = useState(null);
+  const [shiftPinInput, setShiftPinInput] = useState('');
+  const [shiftPinError, setShiftPinError] = useState('');
+  const [showShiftPin, setShowShiftPin] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('ALL');
   const [activeCatalogTab, setActiveCatalogTab] = useState('products'); // products | notes | history
@@ -58,6 +64,14 @@ export default function POSView({
   const [quickPrintOpen, setQuickPrintOpen] = useState(false);
   const [qpDesc, setQpDesc] = useState('تصوير وطباعة أوراق');
   const [qpPages, setQpPages] = useState(10);
+
+  // E-Wallet (Vodafone Cash & InstaPay) Transfer Service Modal
+  const [walletModalOpen, setWalletModalOpen] = useState(false);
+  const [walletType, setWalletType] = useState('vodafone_cash'); // 'vodafone_cash' | 'instapay'
+  const [walletRecipientPhone, setWalletRecipientPhone] = useState('');
+  const [walletAmount, setWalletAmount] = useState('');
+  const [walletFee, setWalletFee] = useState(''); // العمولة المكتسبة
+  const [walletNotes, setWalletNotes] = useState('');
   const [qpRate, setQpRate] = useState(1.0);
   const [qpExtra, setQpExtra] = useState(0);
   const [qpCost, setQpCost] = useState(0);
@@ -265,6 +279,46 @@ export default function POSView({
       }
     ]);
     setQuickPrintOpen(false);
+  };
+
+  // Add E-Wallet Transfer & Commission to current invoice
+  const handleAddWalletTransfer = (e) => {
+    e.preventDefault();
+    const amount = Number(walletAmount) || 0;
+    const fee = Number(walletFee) || 0;
+    if (amount <= 0) return;
+
+    const totalCollectedFromCustomer = amount + fee;
+    const typeLabel = walletType === 'vodafone_cash' ? 'فودافون كاش' : 'إنستا باي (InstaPay)';
+    const phoneLabel = walletRecipientPhone.trim() ? ` لرقم ${walletRecipientPhone.trim()}` : '';
+
+    setCart(prev => [
+      ...prev,
+      {
+        cartItemId: `WALLET-${Date.now()}`,
+        productId: `SRV-WALLET-${Date.now().toString().slice(-4)}`,
+        itemType: 'walletService',
+        walletType,
+        walletAmount: amount,
+        walletFee: fee,
+        name: `تحويل ${typeLabel}${phoneLabel} (مبلغ: ${amount} ج + عمولة: ${fee} ج)`,
+        unitName: 'تحويل',
+        factor: 1,
+        availableUnits: [{ name: 'تحويل', factor: 1, price: totalCollectedFromCustomer }],
+        quantity: 1,
+        unitPrice: totalCollectedFromCustomer,
+        costPrice: amount, // التكلفة هي المبلغ المحول من المحفظة
+        profit: fee, // الربح الصافي هو عمولة التحويل
+        maxStock: 9999,
+        total: totalCollectedFromCustomer
+      }
+    ]);
+
+    setWalletModalOpen(false);
+    setWalletRecipientPhone('');
+    setWalletAmount('');
+    setWalletFee('');
+    setWalletNotes('');
   };
 
   // Process Barcode Scan (from Laser/USB gun or Search Input)
@@ -752,6 +806,15 @@ export default function POSView({
               </button>
               <button
                 type="button"
+                onClick={() => setWalletModalOpen(true)}
+                className="px-3 py-2 rounded-xl text-xs font-black bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white shadow-sm flex items-center gap-1.5 transition"
+                title="تسجيل تحويل فودافون كاش أو إنستا باي وحساب عمولة المكتبة"
+              >
+                <Smartphone className="w-4 h-4 text-amber-300" />
+                + تحويل كاش / إنستا باي (وعمولة)
+              </button>
+              <button
+                type="button"
                 onClick={openDrawerModal}
                 className="px-3 py-2 rounded-xl text-xs font-black bg-slate-900 text-emerald-400 hover:bg-slate-800 border border-slate-700 flex items-center gap-1.5 shadow-sm transition"
                 title="تحصيل وجرد نقدية الدرج (يتطلب رمز مرور المدير العام)"
@@ -1109,8 +1172,27 @@ export default function POSView({
               <ShoppingCart className="w-5 h-5" />
             </div>
             <div>
-              <h3 className="font-black text-sm">شاشة الفاتورة الحالية (POS)</h3>
-              <p className="text-[11px] text-slate-400">الكاشير: {currentUser?.name}</p>
+              <div className="flex items-center gap-2">
+                <h3 className="font-black text-sm">شاشة الفاتورة (POS)</h3>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShiftPinInput('');
+                    setShiftPinError('');
+                    setSelectedShiftUser(null);
+                    setShowShiftPin(false);
+                    setShiftSwitchModalOpen(true);
+                  }}
+                  className="bg-purple-600 hover:bg-purple-500 text-white text-[10px] font-black px-2 py-0.5 rounded-full flex items-center gap-1 transition shadow-sm"
+                  title="تبديل الكاشير / الوردية (شيفت 1 وشيفت 2)"
+                >
+                  <ShieldCheck className="w-3 h-3 text-amber-300" />
+                  <span>تبديل الشيفت</span>
+                </button>
+              </div>
+              <p className="text-[11px] text-slate-300">
+                {currentUser?.shiftName ? `${currentUser.shiftName} • ` : ''}{currentUser?.name}
+              </p>
             </div>
           </div>
           <div className="flex items-center gap-1.5">
@@ -1458,6 +1540,153 @@ export default function POSView({
                 type="button"
                 onClick={() => setQuickPrintOpen(false)}
                 className="bg-slate-200 text-slate-800 font-bold py-2.5 px-4 rounded-xl"
+              >
+                إلغاء
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
+
+      {/* E-Wallet (Vodafone Cash & InstaPay) Transfer Modal */}
+      {walletModalOpen && (
+        <div className="fixed inset-0 z-50 bg-slate-900/70 backdrop-blur-sm flex items-center justify-center p-4">
+          <form
+            onSubmit={handleAddWalletTransfer}
+            className="bg-white rounded-3xl shadow-2xl max-w-md w-full p-6 border border-slate-200 space-y-4 animate-in fade-in zoom-in-95"
+          >
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <div className="flex items-center gap-2.5">
+                <div className="w-10 h-10 rounded-2xl bg-purple-100 text-purple-700 flex items-center justify-center font-bold">
+                  <Smartphone className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="font-black text-base text-slate-900">
+                    خدمة تحويل كاش / إنستا باي
+                  </h3>
+                  <p className="text-[11px] text-slate-500">
+                    تسجيل المبلغ المحول للعميل وحساب عمولة المكتبة فوراً
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setWalletModalOpen(false)}
+                className="text-slate-400 hover:text-slate-600 font-bold text-sm"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Wallet Type Selection */}
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={() => setWalletType('vodafone_cash')}
+                className={`p-3 rounded-2xl border-2 font-black text-xs flex flex-col items-center gap-1.5 transition ${
+                  walletType === 'vodafone_cash'
+                    ? 'border-rose-600 bg-rose-50 text-rose-700 shadow-sm'
+                    : 'border-slate-200 bg-slate-50 text-slate-600 hover:bg-slate-100'
+                }`}
+              >
+                <span className="text-base">🔴</span>
+                <span>فودافون كاش / محفظة</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setWalletType('instapay')}
+                className={`p-3 rounded-2xl border-2 font-black text-xs flex flex-col items-center gap-1.5 transition ${
+                  walletType === 'instapay'
+                    ? 'border-purple-600 bg-purple-50 text-purple-700 shadow-sm'
+                    : 'border-slate-200 bg-slate-50 text-slate-600 hover:bg-slate-100'
+                }`}
+              >
+                <span className="text-base">⚡</span>
+                <span>إنستا باي (InstaPay)</span>
+              </button>
+            </div>
+
+            {/* Recipient Phone or IPA */}
+            <div>
+              <label className="block text-xs font-bold text-slate-700 mb-1">
+                رقم المحفظة / عنوان إنستا باي المحول له (اختياري):
+              </label>
+              <input
+                type="text"
+                value={walletRecipientPhone}
+                onChange={e => setWalletRecipientPhone(e.target.value)}
+                placeholder="مثال: 010XXXXXXXX أو username@instapay"
+                className="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm font-bold font-mono outline-none focus:border-purple-600"
+              />
+            </div>
+
+            {/* Amounts */}
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">
+                  المبلغ المحول للعميل (ج):
+                </label>
+                <input
+                  type="number"
+                  required
+                  min="1"
+                  step="any"
+                  autoFocus
+                  value={walletAmount}
+                  onChange={e => setWalletAmount(e.target.value)}
+                  placeholder="مثال: 500"
+                  className="w-full rounded-xl border-2 border-slate-300 focus:border-purple-600 px-3 py-2 text-base font-black text-slate-900 outline-none text-center"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-emerald-700 mb-1">
+                  عمولة المكتبة المكتسبة (ج):
+                </label>
+                <input
+                  type="number"
+                  min="0"
+                  step="any"
+                  value={walletFee}
+                  onChange={e => setWalletFee(e.target.value)}
+                  placeholder="مثال: 10 أو 15"
+                  className="w-full rounded-xl border-2 border-emerald-400 bg-emerald-50 focus:border-emerald-600 px-3 py-2 text-base font-black text-emerald-800 outline-none text-center"
+                />
+              </div>
+            </div>
+
+            {/* Financial Summary Card */}
+            <div className="bg-slate-50 rounded-2xl p-3.5 border border-slate-200 space-y-1.5 text-xs">
+              <div className="flex justify-between items-center text-slate-600">
+                <span>المبلغ المحول من رصيد المحفظة (التكلفة):</span>
+                <span className="font-mono font-bold">{(Number(walletAmount) || 0).toFixed(2)} ج.م</span>
+              </div>
+              <div className="flex justify-between items-center text-emerald-700 font-bold">
+                <span>صافي عمولة / ربح المكتبة:</span>
+                <span className="font-mono font-black">+{(Number(walletFee) || 0).toFixed(2)} ج.م</span>
+              </div>
+              <div className="border-t border-slate-200 pt-1.5 flex justify-between items-center font-black text-sm text-slate-900">
+                <span>المبلغ المطلوب استلامه كاش من العميل:</span>
+                <span className="text-base text-purple-700 font-black">
+                  {((Number(walletAmount) || 0) + (Number(walletFee) || 0)).toFixed(2)} ج.م
+                </span>
+              </div>
+            </div>
+
+            <div className="flex gap-2 pt-1">
+              <button
+                type="submit"
+                disabled={!Number(walletAmount) || Number(walletAmount) <= 0}
+                className="flex-1 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 disabled:opacity-50 text-white font-black py-3 rounded-2xl shadow-lg shadow-purple-600/30 text-xs flex items-center justify-center gap-1.5 transition"
+              >
+                <Check className="w-4 h-4" />
+                إضافة العملية للفاتورة واستلام المبلغ
+              </button>
+              <button
+                type="button"
+                onClick={() => setWalletModalOpen(false)}
+                className="bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold px-4 py-3 rounded-2xl text-xs transition"
               >
                 إلغاء
               </button>
@@ -2317,6 +2546,175 @@ export default function POSView({
                 </div>
               )}
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Shift Switch (Cashier 1 & Cashier 2) Modal */}
+      {shiftSwitchModalOpen && (
+        <div className="fixed inset-0 z-50 bg-slate-900/80 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl shadow-2xl max-w-sm w-full p-6 border border-slate-200 text-center animate-in fade-in zoom-in-95">
+            <div className="w-14 h-14 bg-gradient-to-tr from-purple-600 to-indigo-600 text-white rounded-2xl flex items-center justify-center mx-auto mb-3 shadow-lg shadow-purple-600/30">
+              <ShieldCheck className="w-7 h-7" />
+            </div>
+            <h3 className="font-black text-lg text-slate-900">
+              تبديل وردية الكاشير (Shift)
+            </h3>
+            <p className="text-xs text-slate-500 mt-1 mb-4">
+              اختر الوردية وأدخل رمز المرور السري (PIN) الخاص بك للدخول
+            </p>
+
+            {!selectedShiftUser ? (
+              <div className="space-y-2">
+                {state.users
+                  .filter(u => u.role === 'cashier' || u.role === 'admin')
+                  .map(u => (
+                    <button
+                      key={u.id}
+                      type="button"
+                      onClick={() => {
+                        setSelectedShiftUser(u);
+                        setShiftPinInput('');
+                        setShiftPinError('');
+                      }}
+                      className={`w-full p-3.5 rounded-2xl border text-right transition flex items-center justify-between ${
+                        currentUser?.id === u.id
+                          ? 'border-emerald-500 bg-emerald-50/50'
+                          : 'border-slate-200 hover:border-purple-400 bg-white hover:bg-purple-50/20'
+                      }`}
+                    >
+                      <div>
+                        <div className="font-black text-sm text-slate-900">{u.name}</div>
+                        <div className="text-[11px] text-slate-500 mt-0.5">
+                          {u.shiftName || (u.role === 'admin' ? 'المدير العام' : 'كاشير')}
+                        </div>
+                      </div>
+                      <span className="text-xs font-bold text-purple-700 bg-purple-100 px-2.5 py-1 rounded-xl">
+                        دخول ❯
+                      </span>
+                    </button>
+                  ))}
+                <button
+                  type="button"
+                  onClick={() => setShiftSwitchModalOpen(false)}
+                  className="w-full bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold py-2.5 rounded-2xl text-xs transition mt-2"
+                >
+                  إلغاء
+                </button>
+              </div>
+            ) : (
+              <form
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  if (shiftPinInput.trim() === selectedShiftUser.pin) {
+                    onSwitchUser?.(selectedShiftUser);
+                    setShiftSwitchModalOpen(false);
+                    setSelectedShiftUser(null);
+                    setShiftPinInput('');
+                    setShiftPinError('');
+                  } else {
+                    setShiftPinError('رمز المرور (PIN) غير صحيح لهذا الكاشير!');
+                    setShiftPinInput('');
+                  }
+                }}
+                className="space-y-3"
+              >
+                <div className="bg-purple-50 p-3 rounded-2xl border border-purple-200 text-right text-xs">
+                  <div className="font-bold text-slate-500">تسجيل الدخول كـ:</div>
+                  <div className="font-black text-purple-900 text-sm mt-0.5">{selectedShiftUser.name}</div>
+                  <div className="text-[11px] text-purple-700">{selectedShiftUser.shiftName}</div>
+                </div>
+
+                <div className="relative">
+                  <input
+                    type={showShiftPin ? 'text' : 'password'}
+                    inputMode="numeric"
+                    autoFocus
+                    placeholder="أدخل رمز المرور السري (PIN)"
+                    value={shiftPinInput}
+                    onChange={(e) => {
+                      setShiftPinInput(e.target.value);
+                      if (shiftPinError) setShiftPinError('');
+                    }}
+                    className={`w-full rounded-2xl border-2 px-4 py-2.5 text-center text-lg font-black tracking-widest outline-none transition ${
+                      shiftPinError
+                        ? 'border-rose-500 bg-rose-50/50 text-rose-700'
+                        : 'border-slate-300 focus:border-purple-600 text-slate-900'
+                    }`}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowShiftPin(!showShiftPin)}
+                    className="absolute left-3 top-1/2 -translate-y-1/2 p-1.5 text-slate-400 hover:text-slate-700"
+                  >
+                    {showShiftPin ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
+                </div>
+
+                {shiftPinError && (
+                  <div className="bg-rose-100 border border-rose-300 text-rose-700 px-3 py-1.5 rounded-xl text-xs font-bold">
+                    {shiftPinError}
+                  </div>
+                )}
+
+                {/* Numpad */}
+                <div className="grid grid-cols-3 gap-1.5 pt-1">
+                  {[1, 2, 3, 4, 5, 6, 7, 8, 9].map((num) => (
+                    <button
+                      key={num}
+                      type="button"
+                      onClick={() => {
+                        setShiftPinInput(prev => prev + String(num));
+                        if (shiftPinError) setShiftPinError('');
+                      }}
+                      className="py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 font-black text-sm active:scale-95 transition"
+                    >
+                      {num}
+                    </button>
+                  ))}
+                  <button
+                    type="button"
+                    onClick={() => setShiftPinInput('')}
+                    className="py-2 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-600 font-bold text-xs active:scale-95 transition"
+                  >
+                    مسح
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShiftPinInput(prev => prev + '0');
+                      if (shiftPinError) setShiftPinError('');
+                    }}
+                    className="py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 font-black text-sm active:scale-95 transition"
+                  >
+                    0
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setShiftPinInput(prev => prev.slice(0, -1))}
+                    className="py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold text-xs active:scale-95 transition"
+                  >
+                    ⌫
+                  </button>
+                </div>
+
+                <div className="flex gap-2 pt-2">
+                  <button
+                    type="submit"
+                    className="flex-1 bg-purple-600 hover:bg-purple-700 text-white font-black py-2.5 rounded-2xl text-xs shadow-md transition"
+                  >
+                    تأكيد الدخول للوردية
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setSelectedShiftUser(null)}
+                    className="bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold px-3 py-2.5 rounded-2xl text-xs transition"
+                  >
+                    رجوع
+                  </button>
+                </div>
+              </form>
+            )}
           </div>
         </div>
       )}

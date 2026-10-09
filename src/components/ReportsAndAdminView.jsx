@@ -12,9 +12,14 @@ export default function ReportsAndAdminView({
   onTriggerCloudSync,
   onRestoreBackup,
   onResetAllData,
-  onSaveSettings
+  onSaveSettings,
+  onSaveUser
 }) {
   const [activeTab, setActiveTab] = useState('profits'); // profits | expenses | users | cloud_sync
+  const [editingUser, setEditingUser] = useState(null);
+  const [editUserName, setEditUserName] = useState('');
+  const [editUserPin, setEditUserPin] = useState('');
+  const [editUserShift, setEditUserShift] = useState('');
 
   // New Expense State
   const [expTitle, setExpTitle] = useState('');
@@ -359,38 +364,147 @@ export default function ReportsAndAdminView({
       {activeTab === 'users' && (
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
           <div className="lg:col-span-6 bg-white p-5 rounded-2xl border border-slate-200 shadow-sm space-y-4">
-            <h3 className="font-black text-base text-slate-900 flex items-center gap-2">
-              <ShieldCheck className="w-5 h-5 text-purple-600" />
-              الموظفون وصلاحيات الكاشير والمدير
-            </h3>
-            <p className="text-xs text-slate-500">اضغط على أي حساب للتبديل الفوري وتجربة صلاحيات الموظف:</p>
-            <div className="space-y-2.5">
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className="font-black text-base text-slate-900 flex items-center gap-2">
+                  <ShieldCheck className="w-5 h-5 text-purple-600" />
+                  ورديات الكاشير والموظفين (شيفت 1 وشيفت 2)
+                </h3>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  تحديد اسم الكاشير وباسورد كل شيفت بواسطة صاحب المكتبة
+                </p>
+              </div>
+            </div>
+
+            <div className="space-y-3">
               {state.users.map(u => {
                 const isCurrent = currentUser?.id === u.id;
+                const isEditing = editingUser?.id === u.id;
                 return (
                   <div
                     key={u.id}
-                    className={`p-3.5 rounded-2xl border flex items-center justify-between transition ${
-                      isCurrent ? 'bg-purple-50 border-purple-400' : 'bg-white border-slate-200'
+                    className={`p-4 rounded-2xl border transition ${
+                      isCurrent ? 'bg-purple-50/60 border-purple-400' : 'bg-white border-slate-200'
                     }`}
                   >
-                    <div>
-                      <div className="font-black text-sm text-slate-900">{u.name}</div>
-                      <div className="text-xs text-slate-500 mt-0.5">
-                        الدور: <strong>{u.role === 'admin' ? 'مدير عام (كامل الصلاحيات)' : u.role === 'cashier' ? 'كاشير مبيعات' : 'مسؤول طباعة ومذكرات'}</strong> • رمز PIN: <code className="font-mono">{u.pin}</code>
+                    {isEditing ? (
+                      <form
+                        onSubmit={async (e) => {
+                          e.preventDefault();
+                          if (!editUserName.trim() || !editUserPin.trim()) return;
+                          if (onSaveUser) {
+                            await onSaveUser({
+                              ...u,
+                              name: editUserName.trim(),
+                              pin: editUserPin.trim(),
+                              shiftName: editUserShift.trim()
+                            });
+                          }
+                          setEditingUser(null);
+                        }}
+                        className="space-y-3 text-xs"
+                      >
+                        <div className="font-bold text-slate-800">
+                          تعديل بيانات {u.role === 'admin' ? 'حساب المدير العام' : (u.shiftName || 'الكاشير')}:
+                        </div>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                          <div>
+                            <label className="block font-bold text-slate-600 mb-1">اسم الموظف / الكاشير:</label>
+                            <input
+                              type="text"
+                              required
+                              value={editUserName}
+                              onChange={e => setEditUserName(e.target.value)}
+                              className="w-full rounded-xl border border-slate-300 px-3 py-1.5 font-bold"
+                            />
+                          </div>
+                          <div>
+                            <label className="block font-bold text-slate-600 mb-1">كلمة المرور / الباسورد (PIN):</label>
+                            <input
+                              type="text"
+                              required
+                              value={editUserPin}
+                              onChange={e => setEditUserPin(e.target.value)}
+                              className="w-full rounded-xl border border-slate-300 px-3 py-1.5 font-mono font-black text-center"
+                            />
+                          </div>
+                        </div>
+                        {u.role !== 'admin' && (
+                          <div>
+                            <label className="block font-bold text-slate-600 mb-1">اسم الوردية (الشيفت):</label>
+                            <input
+                              type="text"
+                              value={editUserShift}
+                              onChange={e => setEditUserShift(e.target.value)}
+                              placeholder="مثال: الوردية الصباحية / الوردية المسائية"
+                              className="w-full rounded-xl border border-slate-300 px-3 py-1.5 font-bold"
+                            />
+                          </div>
+                        )}
+                        <div className="flex gap-2 pt-1">
+                          <button
+                            type="submit"
+                            className="bg-emerald-600 hover:bg-emerald-700 text-white font-black px-4 py-2 rounded-xl text-xs"
+                          >
+                            حفظ التعديلات
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setEditingUser(null)}
+                            className="bg-slate-200 text-slate-700 font-bold px-3 py-2 rounded-xl text-xs"
+                          >
+                            إلغاء
+                          </button>
+                        </div>
+                      </form>
+                    ) : (
+                      <div className="flex items-center justify-between gap-3 flex-wrap">
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <span className="font-black text-sm text-slate-900">{u.name}</span>
+                            {u.shiftName && (
+                              <span className="bg-blue-100 text-blue-800 text-[10px] font-bold px-2 py-0.5 rounded-full">
+                                {u.shiftName}
+                              </span>
+                            )}
+                          </div>
+                          <div className="text-xs text-slate-500 mt-1 flex items-center gap-3">
+                            <span>
+                              الدور: <strong>{u.role === 'admin' ? 'مدير عام' : 'كاشير وردية'}</strong>
+                            </span>
+                            <span>
+                              الباسورد: <code className="font-mono bg-slate-100 px-1.5 py-0.5 rounded font-black text-slate-800">{u.pin}</code>
+                            </span>
+                          </div>
+                        </div>
+
+                        <div className="flex items-center gap-1.5">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setEditingUser(u);
+                              setEditUserName(u.name);
+                              setEditUserPin(u.pin);
+                              setEditUserShift(u.shiftName || '');
+                            }}
+                            className="bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold px-3 py-1.5 rounded-xl text-xs transition"
+                          >
+                            تعديل الباسورد والاسم
+                          </button>
+                          <button
+                            onClick={() => onSwitchUser(u)}
+                            disabled={isCurrent}
+                            className={`px-3 py-1.5 rounded-xl text-xs font-bold transition ${
+                              isCurrent
+                                ? 'bg-emerald-600 text-white cursor-default'
+                                : 'bg-slate-900 hover:bg-slate-800 text-white'
+                            }`}
+                          >
+                            {isCurrent ? 'النشط ✓' : 'تبديل'}
+                          </button>
+                        </div>
                       </div>
-                    </div>
-                    <button
-                      onClick={() => onSwitchUser(u)}
-                      disabled={isCurrent}
-                      className={`px-3.5 py-2 rounded-xl text-xs font-bold ${
-                        isCurrent
-                          ? 'bg-emerald-600 text-white'
-                          : 'bg-slate-900 hover:bg-slate-800 text-white'
-                      }`}
-                    >
-                      {isCurrent ? 'المستخدم النشط حالياً ✓' : 'تبديل لهذا الحساب'}
-                    </button>
+                    )}
                   </div>
                 );
               })}

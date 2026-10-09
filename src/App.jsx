@@ -632,6 +632,19 @@ export default function App() {
     });
   };
 
+  const handleSaveUser = async (userPayload) => {
+    await mutateState('/api/users', 'POST', userPayload, (draft) => {
+      if (!draft.users) draft.users = [];
+      const idx = draft.users.findIndex(u => u.id === userPayload.id);
+      if (idx >= 0) {
+        draft.users[idx] = { ...draft.users[idx], ...userPayload };
+      } else {
+        draft.users.push(userPayload);
+      }
+      return draft;
+    });
+  };
+
   const handleTriggerCloudSync = async () => {
     setIsSyncing(true);
     try {
@@ -935,6 +948,7 @@ export default function App() {
             onSaveCategory={handleSaveCategory}
             onAddExpense={handleAddExpense}
             onSaveSettings={handleSaveSettings}
+            onSwitchUser={(u) => setCurrentUser(u)}
           />
         )}
 
@@ -1007,6 +1021,7 @@ export default function App() {
               onRestoreBackup={handleRestoreBackup}
               onResetAllData={handleResetAllData}
               onSaveSettings={handleSaveSettings}
+              onSaveUser={handleSaveUser}
             />
           ) : (
             renderProtectedSectionLock('الأرباح والمزامنة والإدارة', 'reports')

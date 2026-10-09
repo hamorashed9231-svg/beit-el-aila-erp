@@ -70,13 +70,44 @@ export function normalizeState(parsed) {
   });
 
   if (!Array.isArray(parsed.users) || parsed.users.length === 0) {
-    parsed.users = structuredClone(initialDatabase.users);
+    parsed.users = [
+      { id: 'USR-1', name: 'المدير العام Ahmed kharbosh', username: 'admin', pin: '6101994', role: 'admin', permissions: ['all'], active: true },
+      { id: 'USR-2', name: 'كاشير الوردية الصباحية (شيفت 1)', username: 'cashier_m', pin: '1111', role: 'cashier', permissions: ['pos', 'print'], shiftName: 'الوردية الصباحية', active: true },
+      { id: 'USR-3', name: 'كاشير الوردية المسائية (شيفت 2)', username: 'cashier_e', pin: '2222', role: 'cashier', permissions: ['pos', 'print'], shiftName: 'الوردية المسائية', active: true }
+    ];
   } else {
     const admin = parsed.users.find(u => u.id === 'USR-1' || u.role === 'admin') || parsed.users[0];
     if (admin) {
       admin.name = 'المدير العام Ahmed kharbosh';
       admin.pin = '6101994';
       admin.role = 'admin';
+    }
+    // Ensure morning and evening cashier shifts exist
+    const hasMorning = parsed.users.some(u => u.id === 'USR-2' || u.shiftName === 'الوردية الصباحية');
+    const hasEvening = parsed.users.some(u => u.id === 'USR-3' || u.shiftName === 'الوردية المسائية');
+    if (!hasMorning) {
+      parsed.users.push({
+        id: 'USR-2',
+        name: 'كاشير الوردية الصباحية (شيفت 1)',
+        username: 'cashier_m',
+        pin: '1111',
+        role: 'cashier',
+        permissions: ['pos', 'print'],
+        shiftName: 'الوردية الصباحية',
+        active: true
+      });
+    }
+    if (!hasEvening) {
+      parsed.users.push({
+        id: 'USR-3',
+        name: 'كاشير الوردية المسائية (شيفت 2)',
+        username: 'cashier_e',
+        pin: '2222',
+        role: 'cashier',
+        permissions: ['pos', 'print'],
+        shiftName: 'الوردية المسائية',
+        active: true
+      });
     }
   }
 
