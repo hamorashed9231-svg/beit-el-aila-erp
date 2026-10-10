@@ -276,9 +276,9 @@ export default function ReceiptModal({ sale, settings, onClose }) {
             <p className="text-[11px] text-slate-500 mt-2 leading-relaxed">
               {settings?.receiptFooter || 'شكراً لزيارتكم مكتبة بيت العيلة!'}
             </p>
-            <div className="mt-2 pt-2 border-t border-dotted border-slate-300 flex items-center justify-center gap-1.5 text-[9px] text-slate-500 font-sans">
-              <img src="/rivix-logo.png" alt="Rivix" className="w-3.5 h-3.5 rounded-full object-contain" />
-              <span>مشغل بواسطة ريفيكس سيستم • RIVIX SYSTEM</span>
+            <div className="mt-3 pt-2 border-t-2 border-dotted border-slate-400 flex items-center justify-center gap-2 text-[10px] font-bold text-slate-700 font-sans tracking-wide">
+              <img src="/rivix-logo.png" alt="Rivix" className="w-4 h-4 rounded-full object-contain border border-slate-300" />
+              <span>مشغل بواسطة ريفيكس سيستم • Powered by RIVIX SYSTEM</span>
             </div>
           </div>
         </div>
