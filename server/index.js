@@ -212,7 +212,7 @@ app.post('/api/sales', (req, res) => {
         note.totalSold = (note.totalSold || 0) + qty;
         totalCost += (Number(note.costPrice) + Number(note.teacherCommission || 0)) * qty;
       }
-    } else if (item.itemType === 'printService') {
+    } else if (['printService', 'mobileRecharge', 'billPayment', 'walletService', 'walletTransfer'].includes(item.itemType)) {
       totalCost += (Number(item.costPrice) || 0) * qty;
     } else {
       const product = db.products.find(p => p.id === item.productId);
@@ -289,7 +289,7 @@ app.post('/api/sales/:id/return', (req, res) => {
         note.stockPrinted += qty;
         note.totalSold = Math.max(0, (note.totalSold || 0) - qty);
       }
-    } else if (item.itemType !== 'printService') {
+    } else if (!['printService', 'mobileRecharge', 'billPayment', 'walletService', 'walletTransfer'].includes(item.itemType)) {
       const product = db.products.find(p => p.id === item.productId);
       if (product) {
         product.stock += qty * factor;

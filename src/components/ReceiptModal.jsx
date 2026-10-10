@@ -87,9 +87,14 @@ export default function ReceiptModal({ sale, settings, onClose }) {
     setIsGeneratingImage(true);
     try {
       const canvas = await html2canvas(receiptElement, {
-        scale: 2,
+        scale: 3,
         useCORS: true,
-        backgroundColor: '#ffffff'
+        allowTaint: true,
+        backgroundColor: '#ffffff',
+        width: 380,
+        windowWidth: 380,
+        scrollX: 0,
+        scrollY: 0
       });
 
       canvas.toBlob(async (blob) => {
@@ -180,7 +185,11 @@ export default function ReceiptModal({ sale, settings, onClose }) {
         )}
 
         {/* Printable Thermal Receipt 80mm */}
-        <div id="printable-area" className="p-6 bg-white text-slate-900 text-sm font-sans">
+        <div
+          id="printable-area"
+          style={{ width: '380px', maxWidth: '380px', margin: '0 auto', direction: 'rtl', fontFamily: "'Cairo', 'Tajawal', sans-serif" }}
+          className="p-5 bg-white text-slate-900 text-sm font-sans"
+        >
           <div className="text-center border-b-2 border-dashed border-slate-300 pb-4 mb-3">
             <img src={logoUrl} alt={storeName} className="w-20 h-20 object-contain mx-auto mb-1" />
             <h2 className="text-xl font-black tracking-tight">{storeName}</h2>

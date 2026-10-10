@@ -168,7 +168,7 @@ export default function App() {
             note.stockPrinted = Math.max(0, note.stockPrinted - qty);
             note.totalSold = (note.totalSold || 0) + qty;
           }
-        } else if (!['printService', 'mobileRecharge', 'billPayment', 'walletTransfer'].includes(item.itemType)) {
+        } else if (!['printService', 'mobileRecharge', 'billPayment', 'walletService', 'walletTransfer'].includes(item.itemType)) {
           const prod = draft.products.find(p => p.id === item.productId);
           if (prod) prod.stock = Math.max(0, prod.stock - qty * factor);
         }
@@ -226,7 +226,7 @@ export default function App() {
               note.stockPrinted += qty;
               note.totalSold = Math.max(0, (note.totalSold || 0) - qty);
             }
-          } else if (item.itemType !== 'printService') {
+          } else if (!['printService', 'mobileRecharge', 'billPayment', 'walletService', 'walletTransfer'].includes(item.itemType)) {
             const prod = draft.products.find(p => p.id === item.productId);
             if (prod) prod.stock += qty * factor;
           }

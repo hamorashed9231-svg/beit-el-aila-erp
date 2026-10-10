@@ -143,37 +143,50 @@ export default function POSView({
     setQuickAddModalOpen(true);
   };
 
+  const actionsRef = useRef({});
+  actionsRef.current = {
+    cart,
+    handleHoldCart,
+    toggleWholesaleMode,
+    handleCheckout,
+    processScannedOrSearchedCode,
+    quickAddModalOpen,
+    quickPrintOpen,
+    quickCatOpen
+  };
+
   // Global Keyboard Shortcuts + Hardware USB/Wireless Barcode Scanner Listener
   useEffect(() => {
     const handleKeyDown = (e) => {
+      const current = actionsRef.current;
       if (e.key === 'F2') {
         e.preventDefault();
         searchInputRef.current?.focus();
         return;
       } else if (e.key === 'F4') {
         e.preventDefault();
-        if (cart.length > 0) handleHoldCart();
+        if (current.cart.length > 0) current.handleHoldCart();
         return;
       } else if (e.key === 'F8') {
         e.preventDefault();
-        toggleWholesaleMode();
+        current.toggleWholesaleMode();
         return;
       } else if (e.key === 'F9') {
         e.preventDefault();
-        if (cart.length > 0) handleCheckout();
+        if (current.cart.length > 0) current.handleCheckout();
         return;
       }
 
       // Hardware Barcode Gun Detection when user is NOT typing in an input field
       const tag = document.activeElement?.tagName;
       const isTypingInInput = tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT';
-      if (!isTypingInInput && !quickAddModalOpen && !quickPrintOpen && !quickCatOpen) {
+      if (!isTypingInInput && !current.quickAddModalOpen && !current.quickPrintOpen && !current.quickCatOpen) {
         const now = Date.now();
         if (e.key === 'Enter' && barcodeBufferRef.current.chars.length >= 3) {
           e.preventDefault();
           const scannedCode = barcodeBufferRef.current.chars.trim();
           barcodeBufferRef.current.chars = '';
-          processScannedOrSearchedCode(scannedCode);
+          current.processScannedOrSearchedCode(scannedCode);
         } else if (e.key.length === 1 && !e.ctrlKey && !e.altKey && !e.metaKey) {
           // Reset buffer if more than 120ms elapsed since previous character
           if (now - barcodeBufferRef.current.lastTime > 120) {
@@ -186,7 +199,7 @@ export default function POSView({
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  });
+  }, []);
 
   const toggleWholesaleMode = () => {
     const nextMode = !isWholesale;
